@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, verify_password, create_pairing_token, decode_token
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.user import User
@@ -56,6 +56,16 @@ def serialize_device(device: Device):
             "playing": device.audio_playing,
             "volume": device.volume,
         },
+    }
+
+
+@router.post("/pairing-session")
+def create_pairing_session(
+    user: User = Depends(get_current_user),
+):
+    return {
+        "pairing_token": create_pairing_token(user.id),
+        "expires_in_seconds": 600,
     }
 
 @router.get("")
@@ -109,6 +119,7 @@ def claim_device(
     db.refresh(device)
     return serialize_device(device)
 
+
 @router.post("/activate")
 def activate_device(
     payload: DeviceActivate,
@@ -135,17 +146,48 @@ def activate_device(
             detail="Device disabled",
         )
 
+    try:
+        pairing = decode_token(payload.pairing_token)
+        if pairing.get("type") != "device_pairing":
+            raise ValueError("Wrong token type")
+        pairing_user_id = int(pairing["sub"])
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired pairing token",
+        )
+
+    if device.owner_id is not None and device.owner_id != pairing_user_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Device is already associated with another user",
+        )
+
+    user = db.get(User, pairing_user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Pairing user not found",
+        )
+
+    device.owner_id = pairing_user_id
+    device.lifecycle_status = "ACTIVE"
     device.firmware_version = (
         payload.firmware_version or device.firmware_version
     )
     device.last_seen = datetime.now(timezone.utc)
+
+    if not device.activated_at:
+        device.activated_at = datetime.now(timezone.utc)
+
     db.commit()
+    db.refresh(device)
 
     return {
+        "id": device.id,
         "serial_number": device.serial_number,
+        "owner_id": device.owner_id,
         "mqtt": {
-            "host": "configured-on-device",
-            "port": 1883,
             "topics": {
                 "command": f"devices/{device.serial_number}/command",
                 "status": f"devices/{device.serial_number}/status",

@@ -1,70 +1,66 @@
 # Lily Device Platform
 
-Development workspace for the complete connected RGB/audio device solution.
-
-## Project structure
+Complete development workspace for the connected RGB/audio device.
 
 ```text
 lily_device_platform/
 │
-├── backend/          FastAPI server and API
-├── admin_portal/     Admin web application
-├── mobile_app/       Flutter Android/iOS application
-├── esp32_device/     ESP32 firmware
-└── docs/             Architecture and API notes
+├── backend/          FastAPI REST API + database + MQTT integration
+├── admin_portal/     React/Vite administration portal
+├── mobile_app/       Flutter Android/iOS/Web companion app
+├── esp32_device/     ESP32-S3 PlatformIO firmware
+└── docs/             Architecture and development notes
 ```
 
-The components are intentionally separated so they can be developed and tested independently.
-
-## Current development status
+## Current V0.4 coverage
 
 ### Backend
-Implemented and runnable locally:
 - User registration/login
-- JWT authentication
-- Admin bootstrap user
+- JWT auth
 - Device inventory
+- Secure factory device activation
+- Short-lived pairing tokens
 - Device ownership
-- Device activation
-- Device online/offline status
-- MQTT presence/state handling
-- RGB commands
-- Audio play/stop/volume commands
-- MP3 catalog
-- MP3 upload/download
+- Online/offline state
+- MQTT telemetry
+- RGB/audio commands
+- Music catalog/files
 - Schedules
-- Swagger/OpenAPI
+- Admin APIs
 
-### Admin portal
-Implemented as a React/Vite application:
-- Administrator login
+### Admin Portal
+- Admin login
 - Dashboard
 - Device inventory
-- Online/offline monitoring
 - Add/disable/delete devices
+- Online/offline monitoring
 - User management
-- Music management
-- MP3 upload
+- Music upload/publish/delete
 
-### Mobile app
-Folder reserved for the Flutter application. It will:
-- Register/login users
-- Provision Wi-Fi to ESP32
-- Associate devices
-- Browse/download audio
-- Transfer MP3 to ESP32
-- Control RGB light
-- Control audio
-- Manage schedules
-- Show online/offline device state
+### Flutter App
+- Android/iOS/Web source
+- Registration/login
+- Device list + presence
+- Secure Wi-Fi pairing
+- RGB controls
+- Audio controls
+- Music catalog
+- MP3 server download
+- Direct MP3 device upload
+- Schedules
+- Account/logout
 
-### ESP32 device
-Folder reserved for firmware. It will:
-- Run Wi-Fi provisioning mode
-- Authenticate with backend
-- Maintain MQTT connection
-- Publish online/offline status and heartbeat
-- Receive RGB/audio commands
-- Store one MP3 locally
-- Run local schedules
-- Expose local HTTP API for mobile MP3 upload
+### ESP32
+- ESP32-S3 PlatformIO firmware
+- Factory serial/secret
+- Setup Wi-Fi AP
+- Secure pairing
+- Backend activation
+- MQTT LWT/presence/heartbeat
+- RGB control
+- MP3 LittleFS storage/playback
+- One-file replacement
+- SHA-256 verification
+- Schedule synchronization storage
+
+See `docs/development_flow.md` for startup order.

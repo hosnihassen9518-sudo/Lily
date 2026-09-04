@@ -22,3 +22,16 @@ def create_access_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+
+
+def create_pairing_token(user_id: int, minutes: int = 10) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "exp": expire,
+            "type": "device_pairing",
+        },
+        settings.secret_key,
+        algorithm=ALGORITHM,
+    )

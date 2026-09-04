@@ -13,6 +13,7 @@ class DeviceClaim(BaseModel):
 class DeviceActivate(BaseModel):
     serial_number: str
     device_secret: str
+    pairing_token: str
     firmware_version: str | None = None
 
 class LightCommand(BaseModel):

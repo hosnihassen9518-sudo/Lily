@@ -1,37 +1,68 @@
-# Mobile App
+# Lily Flutter App
 
-Flutter Android/iOS application.
+One Flutter codebase for Android, iOS, and Web.
 
-Planned flow:
+## Implemented
 
-```text
-Register / Login
-      ↓
-My Devices
-      ↓
-Add Device
-      ↓
-Connect to ESP32 provisioning Wi-Fi
-      ↓
-Send home Wi-Fi credentials
-      ↓
-Associate device to current user
-      ↓
-Device dashboard
+- User registration
+- Login/logout and saved JWT
+- Device list
+- Online/offline status, auto refresh every 15 seconds
+- Secure Wi-Fi provisioning flow
+- Short-lived account/device pairing token
+- RGB light control
+- Brightness
+- Color presets
+- Audio play/stop/volume
+- Music catalog
+- Server MP3 download
+- Direct local MP3 upload to ESP32
+- Schedule list/create/delete
+
+## Generate native Flutter folders
+
+Flutter itself is not installed in the build environment used to prepare this project, so the source application is complete but the generated Android/iOS/Web runner folders are intentionally not checked in.
+
+On your development PC:
+
+```powershell
+cd mobile_app
+flutter create . --platforms=android,ios,web
+flutter pub get
 ```
 
-Functions:
+The existing `lib/` and `pubspec.yaml` are kept.
 
-- Register/login
-- Account management
-- Device association
-- Device online/offline indicator
-- RGB light ON/OFF
-- Color selection
-- Brightness
-- Browse music catalog
-- Preview/download MP3
-- Upload MP3 directly to ESP32 over local Wi-Fi
-- Play/stop
-- Volume
-- Create/delete schedules
+## Backend address
+
+For a physical phone, the backend must be reachable on your LAN.
+
+Example:
+
+```powershell
+flutter run --dart-define=BACKEND_URL=http://192.168.1.50:8000/api/v1
+```
+
+For Android emulator:
+
+```powershell
+flutter run --dart-define=BACKEND_URL=http://10.0.2.2:8000/api/v1
+```
+
+For Flutter Web on the same PC:
+
+```powershell
+flutter run -d chrome --dart-define=BACKEND_URL=http://127.0.0.1:8000/api/v1
+```
+
+## Android Wi-Fi permissions
+
+After `flutter create .`, make sure AndroidManifest.xml contains the permissions required by the `wifi_iot` package, including nearby Wi-Fi/location permissions appropriate for your Android SDK level.
+
+## iOS Wi-Fi
+
+iOS requires the Hotspot Configuration capability for programmatic Wi-Fi joining. Add it in Xcode for the Runner target.
+
+## Important web limitation
+
+Browsers generally cannot programmatically join an ESP32 Wi-Fi network. The same Flutter app can run on Web for account/device control, but initial Wi-Fi provisioning is intended for Android/iOS.
