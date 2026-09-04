@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     music_dir: str = "./data/music"
     max_music_size_mb: int = 20
 
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
     admin_email: str = "admin@example.com"
     admin_password: str = "ChangeThisAdminPassword!"
 

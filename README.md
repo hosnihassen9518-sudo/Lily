@@ -36,7 +36,15 @@ Implemented and runnable locally:
 - Swagger/OpenAPI
 
 ### Admin portal
-Folder reserved for the administration web application. It will use the backend REST API.
+Implemented as a React/Vite application:
+- Administrator login
+- Dashboard
+- Device inventory
+- Online/offline monitoring
+- Add/disable/delete devices
+- User management
+- Music management
+- MP3 upload
 
 ### Mobile app
 Folder reserved for the Flutter application. It will:

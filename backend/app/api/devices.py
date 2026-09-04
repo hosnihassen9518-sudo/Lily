@@ -9,6 +9,7 @@ from app.core.security import hash_password, verify_password
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.user import User
+from app.schemas.admin import DisabledUpdate
 from app.schemas.device import (
     DeviceActivate,
     DeviceClaim,
@@ -305,3 +306,37 @@ def admin_list_devices(
     ).all()
 
     return [serialize_device(d) for d in devices]
+
+
+@router.patch("/admin/{device_id}/disabled")
+def admin_set_device_disabled(
+    device_id: int,
+    payload: DisabledUpdate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    device.lifecycle_status = "DISABLED" if payload.disabled else "ACTIVE"
+    if payload.disabled:
+        device.is_online = False
+
+    db.commit()
+    db.refresh(device)
+    return serialize_device(device)
+
+@router.delete("/admin/{device_id}")
+def admin_delete_device(
+    device_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    db.delete(device)
+    db.commit()
+    return {"ok": True}

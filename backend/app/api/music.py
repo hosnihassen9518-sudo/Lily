@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.music import Music
 from app.models.user import User
+from app.schemas.admin import EnabledUpdate
 
 router = APIRouter(prefix="/music", tags=["music"])
 
@@ -132,3 +133,61 @@ async def upload_music(
         "filesize": music.filesize,
         "checksum_sha256": checksum,
     }
+
+
+@router.get("/admin/all")
+def admin_list_music(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    tracks = db.scalars(select(Music).order_by(Music.created_at.desc())).all()
+    return [
+        {
+            "id": track.id,
+            "title": track.title,
+            "description": track.description,
+            "filename": track.filename,
+            "filesize": track.filesize,
+            "checksum_sha256": track.checksum_sha256,
+            "enabled": track.enabled,
+            "created_at": track.created_at,
+        }
+        for track in tracks
+    ]
+
+@router.patch("/admin/{music_id}/enabled")
+def admin_set_music_enabled(
+    music_id: int,
+    payload: EnabledUpdate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    music = db.get(Music, music_id)
+    if not music:
+        raise HTTPException(status_code=404, detail="Music not found")
+
+    music.enabled = payload.enabled
+    db.commit()
+    return {"id": music.id, "enabled": music.enabled}
+
+@router.delete("/admin/{music_id}")
+def admin_delete_music(
+    music_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    music = db.get(Music, music_id)
+    if not music:
+        raise HTTPException(status_code=404, detail="Music not found")
+
+    path = music.storage_path
+    db.delete(music)
+    db.commit()
+
+    if path and os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    return {"ok": True}
