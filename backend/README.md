@@ -1,4 +1,8 @@
-# Backend
+# Lily Backend V0.5
+
+FastAPI backend for the Lily smart-home platform. V0.5 introduces Home/Room organization, generic Device Types and Capabilities, latest device state, and time-series telemetry while remaining compatible with V0.4 devices.
+
+Full V0.5 notes: `../docs/v0.5-smart-home-core.md`.
 
 FastAPI backend for the Lily device platform.
 

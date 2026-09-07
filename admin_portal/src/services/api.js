@@ -50,6 +50,12 @@ export const api = {
   me: () => request("/auth/me"),
 
   dashboard: () => request("/admin/dashboard"),
+  homes: () => request("/admin/homes"),
+  deviceTypes: () => request("/device-types"),
+  createDeviceType: (payload) => request("/admin/device-types", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
   users: () => request("/admin/users"),
   setUserActive: (userId, active) =>
     request(`/admin/users/${userId}/active`, {

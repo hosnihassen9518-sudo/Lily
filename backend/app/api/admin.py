@@ -6,6 +6,8 @@ from app.api.deps import require_admin
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.music import Music
+from app.models.home import Home, Room
+from app.models.smart_device import DeviceTelemetry, DeviceType
 from app.models.user import User
 from app.schemas.admin import ActiveUpdate
 
@@ -27,6 +29,10 @@ def dashboard(db: Session = Depends(get_db)):
             select(func.count()).select_from(Device).where(Device.owner_id == None)
         ),
         "music_tracks": db.scalar(select(func.count()).select_from(Music)),
+        "homes": db.scalar(select(func.count()).select_from(Home)),
+        "rooms": db.scalar(select(func.count()).select_from(Room)),
+        "device_types": db.scalar(select(func.count()).select_from(DeviceType)),
+        "telemetry_points": db.scalar(select(func.count()).select_from(DeviceTelemetry)),
     }
 
 @router.get("/users")
@@ -62,3 +68,25 @@ def set_user_active(
     user.is_active = payload.active
     db.commit()
     return {"id": user.id, "active": user.is_active}
+
+
+@router.get("/homes")
+def homes(db: Session = Depends(get_db)):
+    rows = db.scalars(select(Home).order_by(Home.created_at.desc())).all()
+    result = []
+    for home in rows:
+        owner = db.get(User, home.owner_id)
+        room_count = db.scalar(select(func.count()).select_from(Room).where(Room.home_id == home.id)) or 0
+        from app.models.smart_device import DeviceProfile
+        device_count = db.scalar(select(func.count()).select_from(DeviceProfile).where(DeviceProfile.home_id == home.id)) or 0
+        result.append({
+            "id": home.id,
+            "name": home.name,
+            "timezone": home.timezone,
+            "owner_id": home.owner_id,
+            "owner_email": owner.email if owner else None,
+            "rooms": room_count,
+            "devices": device_count,
+            "created_at": home.created_at,
+        })
+    return result

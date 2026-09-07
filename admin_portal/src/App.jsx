@@ -6,6 +6,8 @@ import DashboardPage from "./pages/DashboardPage";
 import DevicesPage from "./pages/DevicesPage";
 import UsersPage from "./pages/UsersPage";
 import MusicPage from "./pages/MusicPage";
+import HomesPage from "./pages/HomesPage";
+import DeviceTypesPage from "./pages/DeviceTypesPage";
 import Layout from "./components/Layout";
 
 function Protected({ children }) {
@@ -37,6 +39,8 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="devices" element={<DevicesPage />} />
+        <Route path="homes" element={<HomesPage />} />
+        <Route path="device-types" element={<DeviceTypesPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="music" element={<MusicPage />} />
       </Route>

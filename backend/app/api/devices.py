@@ -9,6 +9,8 @@ from app.core.security import hash_password, verify_password, create_pairing_tok
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.user import User
+from app.models.home import Home
+from app.models.smart_device import DeviceProfile, DeviceType
 from app.schemas.admin import DisabledUpdate
 from app.schemas.device import (
     DeviceActivate,
@@ -20,6 +22,27 @@ from app.schemas.device import (
 from app.services.mqtt_service import mqtt_service
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+def ensure_smart_profile(db: Session, device: Device, user_id: int):
+    home = db.scalar(select(Home).where(Home.owner_id == user_id).order_by(Home.id))
+    if not home:
+        home = Home(owner_id=user_id, name="My Home", timezone="Europe/Paris")
+        db.add(home)
+        db.flush()
+
+    profile = db.get(DeviceProfile, device.id)
+    if not profile:
+        dtype = db.scalar(select(DeviceType).where(DeviceType.key == "lily_audio_light"))
+        profile = DeviceProfile(
+            device_id=device.id,
+            home_id=home.id,
+            device_type_id=dtype.id if dtype else None,
+        )
+        db.add(profile)
+    elif profile.home_id is None:
+        profile.home_id = home.id
+    return profile
 
 def serialize_device(device: Device):
     if device.lifecycle_status == "DISABLED":
@@ -115,6 +138,7 @@ def claim_device(
     if not device.activated_at:
         device.activated_at = datetime.now(timezone.utc)
 
+    ensure_smart_profile(db, device, user.id)
     db.commit()
     db.refresh(device)
     return serialize_device(device)
@@ -180,6 +204,7 @@ def activate_device(
     if not device.activated_at:
         device.activated_at = datetime.now(timezone.utc)
 
+    profile = ensure_smart_profile(db, device, pairing_user_id)
     db.commit()
     db.refresh(device)
 
@@ -187,6 +212,8 @@ def activate_device(
         "id": device.id,
         "serial_number": device.serial_number,
         "owner_id": device.owner_id,
+        "home_id": profile.home_id,
+        "device_type_id": profile.device_type_id,
         "mqtt": {
             "topics": {
                 "command": f"devices/{device.serial_number}/command",

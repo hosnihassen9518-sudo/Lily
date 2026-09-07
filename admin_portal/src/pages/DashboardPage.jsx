@@ -5,6 +5,9 @@ import {
   Music2,
   Wifi,
   Boxes,
+  House,
+  DoorOpen,
+  Activity,
   RefreshCw,
 } from "lucide-react";
 import { api } from "../services/api";
@@ -14,6 +17,9 @@ const cards = [
   { key: "devices_online", label: "Online now", icon: Wifi },
   { key: "devices_inventory", label: "In inventory", icon: Boxes },
   { key: "users", label: "Users", icon: Users },
+  { key: "homes", label: "Homes", icon: House },
+  { key: "rooms", label: "Rooms", icon: DoorOpen },
+  { key: "telemetry_points", label: "Telemetry points", icon: Activity },
   { key: "music_tracks", label: "Music tracks", icon: Music2 },
 ];
 
@@ -47,7 +53,7 @@ export default function DashboardPage() {
       <div className="page-heading">
         <div>
           <h1>Dashboard</h1>
-          <p>Live overview of users, inventory, and connected devices.</p>
+          <p>Live overview of users, smart homes, inventory, telemetry, and connected devices.</p>
         </div>
         <button className="secondary-button" onClick={load}>
           <RefreshCw size={17} />

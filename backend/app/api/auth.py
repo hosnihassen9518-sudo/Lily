@@ -10,6 +10,7 @@ from app.core.security import (
 )
 from app.db.session import get_db
 from app.models.user import User
+from app.models.home import Home
 from app.schemas.auth import (
     LoginRequest,
     RegisterRequest,
@@ -39,6 +40,8 @@ def register(
     )
 
     db.add(user)
+    db.flush()
+    db.add(Home(owner_id=user.id, name="My Home", timezone="Europe/Paris"))
     db.commit()
     db.refresh(user)
 

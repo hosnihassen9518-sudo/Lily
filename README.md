@@ -1,4 +1,6 @@
-# Lily Device Platform
+# Lily Device Platform — V0.5 Smart Home Core
+
+> V0.5 adds generic smart-home Homes, Rooms, Device Types, Capabilities, State and Telemetry while preserving V0.4 RGB/audio compatibility. See `docs/v0.5-smart-home-core.md`.
 
 Complete development workspace for the connected RGB/audio device.
 
