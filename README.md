@@ -1,4 +1,6 @@
-# Lily Device Platform — V0.5 Smart Home Core
+# Lily Device Platform
+
+**Release:** V0.5.1 (Smart Home Core maintenance rebuild) — V0.5 Smart Home Core
 
 > V0.5 adds generic smart-home Homes, Rooms, Device Types, Capabilities, State and Telemetry while preserving V0.4 RGB/audio compatibility. See `docs/v0.5-smart-home-core.md`.
 
@@ -66,3 +68,7 @@ lily_device_platform/
 - Schedule synchronization storage
 
 See `docs/development_flow.md` for startup order.
+
+## V0.6
+
+V0.6 adds room-grouped device widgets, capability-aware device controls, responsive web/mobile navigation, inline validation, and mobile-only Lily Wi-Fi provisioning with credential verification. See `docs/v0.6-ux-provisioning.md`.

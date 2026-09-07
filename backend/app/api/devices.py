@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.device import Device
 from app.models.user import User
 from app.models.home import Home
-from app.models.smart_device import DeviceProfile, DeviceType
+from app.models.smart_device import DeviceProfile, DeviceType, DeviceTypeCapability, DeviceState
 from app.schemas.admin import DisabledUpdate
 from app.schemas.device import (
     DeviceActivate,
@@ -44,7 +44,7 @@ def ensure_smart_profile(db: Session, device: Device, user_id: int):
         profile.home_id = home.id
     return profile
 
-def serialize_device(device: Device):
+def serialize_device(device: Device, db: Session | None = None):
     if device.lifecycle_status == "DISABLED":
         display_status = "DISABLED"
     elif device.owner_id is None:
@@ -53,6 +53,37 @@ def serialize_device(device: Device):
         display_status = "ONLINE"
     else:
         display_status = "OFFLINE"
+
+    smart_home = {
+        "home_id": None,
+        "room_id": None,
+        "device_type_id": None,
+        "device_type_key": None,
+        "device_type_name": None,
+        "capabilities": [],
+    }
+    generic_state = {}
+    if db is not None:
+        state_row = db.get(DeviceState, device.id)
+        if state_row:
+            generic_state = state_row.state or {}
+        profile = db.get(DeviceProfile, device.id)
+        if profile:
+            smart_home["home_id"] = profile.home_id
+            smart_home["room_id"] = profile.room_id
+            smart_home["device_type_id"] = profile.device_type_id
+            if profile.device_type_id:
+                dtype = db.get(DeviceType, profile.device_type_id)
+                if dtype:
+                    smart_home["device_type_key"] = dtype.key
+                    smart_home["device_type_name"] = dtype.name
+                    smart_home["capabilities"] = list(
+                        db.scalars(
+                            select(DeviceTypeCapability.capability).where(
+                                DeviceTypeCapability.device_type_id == dtype.id
+                            )
+                        ).all()
+                    )
 
     return {
         "id": device.id,
@@ -79,6 +110,8 @@ def serialize_device(device: Device):
             "playing": device.audio_playing,
             "volume": device.volume,
         },
+        "smart_home": smart_home,
+        "generic_state": generic_state,
     }
 
 
@@ -100,7 +133,7 @@ def my_devices(
         select(Device).where(Device.owner_id == user.id)
     ).all()
 
-    return [serialize_device(d) for d in devices]
+    return [serialize_device(d, db) for d in devices]
 
 @router.post("/claim")
 def claim_device(
@@ -141,7 +174,7 @@ def claim_device(
     ensure_smart_profile(db, device, user.id)
     db.commit()
     db.refresh(device)
-    return serialize_device(device)
+    return serialize_device(device, db)
 
 
 @router.post("/activate")
@@ -205,6 +238,10 @@ def activate_device(
         device.activated_at = datetime.now(timezone.utc)
 
     profile = ensure_smart_profile(db, device, pairing_user_id)
+    if payload.device_type_key:
+        requested_type = db.scalar(select(DeviceType).where(DeviceType.key == payload.device_type_key))
+        if requested_type:
+            profile.device_type_id = requested_type.id
     db.commit()
     db.refresh(device)
 
@@ -256,7 +293,7 @@ def set_light(
     )
 
     return {
-        "device": serialize_device(device),
+        "device": serialize_device(device, db),
         "mqtt_published": delivered,
     }
 
@@ -363,7 +400,7 @@ def admin_create_device(
     db.commit()
     db.refresh(device)
 
-    return serialize_device(device)
+    return serialize_device(device, db)
 
 @router.get("/admin/all")
 def admin_list_devices(
@@ -374,7 +411,7 @@ def admin_list_devices(
         select(Device).order_by(Device.id.desc())
     ).all()
 
-    return [serialize_device(d) for d in devices]
+    return [serialize_device(d, db) for d in devices]
 
 
 @router.patch("/admin/{device_id}/disabled")
@@ -394,7 +431,7 @@ def admin_set_device_disabled(
 
     db.commit()
     db.refresh(device)
-    return serialize_device(device)
+    return serialize_device(device, db)
 
 @router.delete("/admin/{device_id}")
 def admin_delete_device(

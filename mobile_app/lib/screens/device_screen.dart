@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
@@ -21,8 +22,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
   Color color = Colors.white;
 
   Device? get device {
-    final list = context.read<AppState>().devices;
-    for (final d in list) {
+    for (final d in context.read<AppState>().devices) {
       if (d.id == widget.deviceId) return d;
     }
     return null;
@@ -37,49 +37,47 @@ class _DeviceScreenState extends State<DeviceScreen> {
     initialized = true;
   }
 
+  Future<void> _run(Future<void> Function() fn) async {
+    try {
+      await fn();
+      if (mounted) await context.read<AppState>().refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   Future<void> pushLight() async {
     final d = device;
     if (d == null) return;
-    await context.read<AppState>().api.setLight(
+    await _run(() => context.read<AppState>().api.setLight(
           d.id,
           enabled: lightOn,
           brightness: brightness.round(),
           r: (color.r * 255).round(),
           g: (color.g * 255).round(),
           b: (color.b * 255).round(),
-        );
-    await context.read<AppState>().refresh();
+        ));
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final d = state.devices.where((e) => e.id == widget.deviceId).firstOrNull;
-
-    if (d == null) {
-      return const Scaffold(body: Center(child: Text('Device not found')));
-    }
-
+    final matches = state.devices.where((e) => e.id == widget.deviceId);
+    if (matches.isEmpty) return const Scaffold(body: Center(child: Text('Device not found')));
+    final d = matches.first;
     initialize(d);
 
-    final presets = [
-      Colors.white,
-      Colors.orange,
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.purple,
-    ];
+    final presets = [Colors.white, Colors.orange, Colors.red, Colors.blue, Colors.green, Colors.purple];
+    final room = state.rooms.where((r) => r.id == d.roomId).firstOrNull;
+    final home = state.homes.where((h) => h.id == d.homeId).firstOrNull;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(d.displayName),
-        actions: [
-          IconButton(
-            onPressed: state.refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
+        actions: [IconButton(onPressed: state.refresh, icon: const Icon(Icons.refresh))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -87,176 +85,170 @@ class _DeviceScreenState extends State<DeviceScreen> {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
-              child: Row(
+              child: Wrap(
+                spacing: 24,
+                runSpacing: 12,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(d.serial),
-                        const SizedBox(height: 8),
-                        DeviceStatusBadge(status: d.status),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    d.wifiRssi == null ? 'Wi-Fi —' : '${d.wifiRssi} dBm',
-                  ),
+                  _Info(label: 'Status', child: DeviceStatusBadge(status: d.status)),
+                  _Info(label: 'Type', value: d.deviceTypeName ?? d.model),
+                  _Info(label: 'Home', value: home?.name ?? 'Unassigned'),
+                  _Info(label: 'Room', value: room?.name ?? 'No room'),
+                  _Info(label: 'Wi-Fi', value: d.wifiRssi == null ? '—' : '${d.wifiRssi} dBm'),
+                  _Info(label: 'Serial', value: d.serial),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Light',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                        ),
-                      ),
+          const SizedBox(height: 12),
+          if (d.supportsLight)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Expanded(child: Text('Light', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
                       Switch(
                         value: lightOn,
-                        onChanged: d.online
-                            ? (value) async {
-                                setState(() => lightOn = value);
-                                await pushLight();
-                              }
-                            : null,
+                        onChanged: d.online ? (v) async { setState(() => lightOn = v); await pushLight(); } : null,
+                      ),
+                    ]),
+                    if (d.hasCapability('brightness')) ...[
+                      const SizedBox(height: 12),
+                      Text('Brightness: ${brightness.round()}%'),
+                      Slider(
+                        value: brightness,
+                        min: 0,
+                        max: 100,
+                        divisions: 20,
+                        onChanged: d.online ? (v) => setState(() => brightness = v) : null,
+                        onChangeEnd: d.online ? (_) => pushLight() : null,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Brightness'),
-                  Slider(
-                    value: brightness,
-                    min: 0,
-                    max: 100,
-                    divisions: 20,
-                    label: '${brightness.round()}%',
-                    onChanged: d.online
-                        ? (value) => setState(() => brightness = value)
-                        : null,
-                    onChangeEnd: d.online ? (_) => pushLight() : null,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Color'),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    children: presets
-                        .map(
-                          (preset) => InkWell(
-                            onTap: d.online
-                                ? () async {
-                                    setState(() => color = preset);
-                                    await pushLight();
-                                  }
-                                : null,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: preset,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: color == preset
-                                      ? Colors.black
-                                      : Colors.grey.shade300,
-                                  width: color == preset ? 3 : 1,
-                                ),
-                              ),
+                    if (d.hasCapability('rgb')) ...[
+                      const SizedBox(height: 12),
+                      const Text('Color'),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        children: presets.map((preset) => InkWell(
+                          onTap: d.online ? () async { setState(() => color = preset); await pushLight(); } : null,
+                          child: Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              color: preset,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: color == preset ? Colors.black : Colors.grey.shade300, width: color == preset ? 3 : 1),
                             ),
                           ),
-                        )
-                        .toList(),
-                  ),
-                ],
+                        )).toList(),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Audio',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(d.audioLoaded ? 'Audio installed' : 'No audio installed'),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
+          if (d.supportsAudio) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Music', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(d.currentTrackTitle ?? (d.audioLoaded ? 'Installed audio' : 'No audio installed')),
+                    const SizedBox(height: 4),
+                    Text(d.audioPlaying ? 'Playing now' : 'Stopped', style: TextStyle(color: d.audioPlaying ? Colors.green : Colors.grey.shade600)),
+                    const SizedBox(height: 12),
+                    Row(children: [
                       FilledButton.icon(
-                        onPressed: d.online && d.audioLoaded
-                            ? () async {
-                                await state.api.playAudio(d.id);
-                                await state.refresh();
-                              }
-                            : null,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Play'),
+                        onPressed: d.online && d.audioLoaded ? () => _run(() => state.api.playAudio(d.id)) : null,
+                        icon: const Icon(Icons.play_arrow), label: const Text('Play'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
-                        onPressed: d.online
-                            ? () async {
-                                await state.api.stopAudio(d.id);
-                                await state.refresh();
-                              }
-                            : null,
-                        icon: const Icon(Icons.stop),
-                        label: const Text('Stop'),
+                        onPressed: d.online ? () => _run(() => state.api.stopAudio(d.id)) : null,
+                        icon: const Icon(Icons.stop), label: const Text('Stop'),
+                      ),
+                    ]),
+                    if (d.hasCapability('volume')) ...[
+                      const SizedBox(height: 14),
+                      Text('Volume: ${volume.round()}%'),
+                      Slider(
+                        value: volume, min: 0, max: 100, divisions: 20,
+                        onChanged: d.online ? (v) => setState(() => volume = v) : null,
+                        onChangeEnd: d.online ? (v) => _run(() => state.api.setVolume(d.id, v.round())) : null,
                       ),
                     ],
+                    if (!kIsWeb)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text('Music installation remains available from the Music library on mobile.', style: TextStyle(color: Colors.grey.shade600)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Placement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    value: d.homeId,
+                    decoration: const InputDecoration(labelText: 'Home'),
+                    items: state.homes.map((h) => DropdownMenuItem<int?>(value: h.id, child: Text(h.name))).toList(),
+                    onChanged: (homeId) async {
+                      await _run(() => state.api.moveDevice(d.id, homeId: homeId, roomId: null));
+                    },
                   ),
-                  const SizedBox(height: 14),
-                  const Text('Volume'),
-                  Slider(
-                    value: volume,
-                    min: 0,
-                    max: 100,
-                    divisions: 20,
-                    label: '${volume.round()}%',
-                    onChanged: d.online
-                        ? (value) => setState(() => volume = value)
-                        : null,
-                    onChangeEnd: d.online
-                        ? (value) async {
-                            await state.api.setVolume(d.id, value.round());
-                            await state.refresh();
-                          }
-                        : null,
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    value: d.roomId,
+                    decoration: const InputDecoration(labelText: 'Room'),
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('No room')),
+                      ...state.rooms.where((r) => r.homeId == d.homeId).map((r) => DropdownMenuItem<int?>(value: r.id, child: Text(r.name))),
+                    ],
+                    onChanged: d.homeId == null ? null : (roomId) => _run(() => state.api.moveDevice(d.id, homeId: d.homeId, roomId: roomId)),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           FilledButton.tonalIcon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SchedulesScreen(device: d),
-              ),
-            ),
-            icon: const Icon(Icons.schedule),
-            label: const Text('Schedules'),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SchedulesScreen(device: d))),
+            icon: const Icon(Icons.schedule), label: const Text('Schedules'),
           ),
         ],
       ),
     );
   }
+}
+
+class _Info extends StatelessWidget {
+  final String label;
+  final String? value;
+  final Widget? child;
+  const _Info({required this.label, this.value, this.child});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 150,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          const SizedBox(height: 4),
+          child ?? Text(value ?? '—', style: const TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+      );
 }
 
 extension FirstOrNull<T> on Iterable<T> {

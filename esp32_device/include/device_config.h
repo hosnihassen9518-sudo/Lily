@@ -12,7 +12,12 @@
 #define MQTT_HOST           "192.168.1.100"
 #define MQTT_PORT           1883
 
-#define FIRMWARE_VERSION    "0.4.0"
+#define FIRMWARE_VERSION    "0.6.0"
+
+// Advertised device identity/capabilities used during mobile provisioning.
+#define DEVICE_TYPE_KEY     "lily_audio_light"
+#define DEVICE_TYPE_AP_TAG  "AUDIO-LIGHT"
+#define DEVICE_TYPE_NAME    "Lily Audio Light"
 
 // Hardware pins - adjust to your PCB.
 #define RGB_PIN             4

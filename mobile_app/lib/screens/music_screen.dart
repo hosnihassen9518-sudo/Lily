@@ -18,11 +18,40 @@ class _MusicScreenState extends State<MusicScreen> {
   Future<void> installTrack(MusicTrack track) async {
     final state = context.read<AppState>();
 
-    if (state.devices.isEmpty) {
+    final audioDevices = state.devices.where((d) => d.supportsAudio).toList();
+    if (audioDevices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add a Lily device first.')),
+        const SnackBar(content: Text('Add an audio-capable Lily device first.')),
       );
       return;
+    }
+
+    var targetDevice = audioDevices.first;
+    if (audioDevices.length > 1) {
+      final selected = await showDialog<int>(
+        context: context,
+        builder: (context) {
+          int value = targetDevice.id;
+          return StatefulBuilder(
+            builder: (context, setLocalState) => AlertDialog(
+              title: const Text('Choose device'),
+              content: DropdownButtonFormField<int>(
+                value: value,
+                items: audioDevices
+                    .map((d) => DropdownMenuItem(value: d.id, child: Text(d.displayName)))
+                    .toList(),
+                onChanged: (v) { if (v != null) setLocalState(() => value = v); },
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                FilledButton(onPressed: () => Navigator.pop(context, value), child: const Text('Continue')),
+              ],
+            ),
+          );
+        },
+      );
+      if (selected == null) return;
+      targetDevice = audioDevices.firstWhere((d) => d.id == selected);
     }
 
     setState(() {
@@ -69,7 +98,12 @@ class _MusicScreenState extends State<MusicScreen> {
         checksum: track.checksum,
       );
 
-      setState(() => status = '${track.title} installed successfully.');
+      await state.api.setDeviceState(targetDevice.id, {
+        ...targetDevice.genericState,
+        'current_track_title': track.title,
+      });
+      await state.refresh();
+      setState(() => status = '${track.title} installed on ${targetDevice.displayName}.');
     } catch (e) {
       setState(() => status = e.toString());
     } finally {

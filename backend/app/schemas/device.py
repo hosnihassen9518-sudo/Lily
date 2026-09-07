@@ -15,6 +15,7 @@ class DeviceActivate(BaseModel):
     device_secret: str
     pairing_token: str
     firmware_version: str | None = None
+    device_type_key: str | None = None
 
 class LightCommand(BaseModel):
     enabled: bool

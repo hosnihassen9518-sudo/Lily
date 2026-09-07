@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../models/device.dart';
 import '../models/music_track.dart';
+import '../models/home.dart';
 
 class ApiService {
   String? token;
@@ -40,10 +41,41 @@ class ApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Request failed (${response.statusCode})';
+
       try {
         final decoded = jsonDecode(response.body);
-        message = decoded['detail']?.toString() ?? message;
-      } catch (_) {}
+
+        if (decoded is Map<String, dynamic>) {
+          final detail = decoded['detail'];
+
+          if (detail is String) {
+            message = detail;
+          } else if (detail is List) {
+            final messages = detail.map((error) {
+              if (error is Map<String, dynamic>) {
+                final loc = error['loc'];
+                String field = '';
+
+                if (loc is List && loc.isNotEmpty) {
+                  field = loc.last.toString();
+                }
+
+                final msg = error['msg']?.toString() ?? 'Invalid value';
+                return field.isNotEmpty ? '$field: $msg' : msg;
+              }
+
+              return error.toString();
+            }).join('\n');
+
+            if (messages.isNotEmpty) {
+              message = messages;
+            }
+          }
+        }
+      } catch (_) {
+        // Keep the status-code fallback when the server response is not JSON.
+      }
+
       throw Exception(message);
     }
 
@@ -96,6 +128,17 @@ class ApiService {
   Future<String> createPairingToken() async {
     final data = await _jsonRequest('/devices/pairing-session', method: 'POST');
     return data['pairing_token'] as String;
+  }
+
+  Future<void> setDeviceState(int deviceId, Map<String, dynamic> state) async {
+    await _jsonRequest('/devices/$deviceId/state', method: 'PUT', body: {'state': state});
+  }
+
+  Future<void> genericCommand(int deviceId, String type, Map<String, dynamic> payload) async {
+    await _jsonRequest('/devices/$deviceId/command', method: 'POST', body: {
+      'type': type,
+      'payload': payload,
+    });
   }
 
   Future<void> setLight(
@@ -194,4 +237,62 @@ class ApiService {
   Future<void> deleteSchedule(int scheduleId) async {
     await _jsonRequest('/schedules/$scheduleId', method: 'DELETE');
   }
+  Future<List<LilyHome>> getHomes() async {
+    final uri = Uri.parse('${AppConfig.backendBaseUrl}/homes');
+    final response = await http.get(uri, headers: _headers);
+    if (response.statusCode != 200) {
+      throw Exception(_messageFromResponse(response, 'Could not load homes'));
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => LilyHome.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  Future<List<LilyRoom>> getRooms(int homeId) async {
+    final uri = Uri.parse('${AppConfig.backendBaseUrl}/homes/$homeId/rooms');
+    final response = await http.get(uri, headers: _headers);
+    if (response.statusCode != 200) {
+      throw Exception(_messageFromResponse(response, 'Could not load rooms'));
+    }
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((e) => LilyRoom.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  Future<void> createHome(String name) async {
+    await _jsonRequest('/homes', method: 'POST', body: {'name': name, 'timezone': 'Europe/Paris'});
+  }
+
+  Future<void> renameHome(int homeId, String name) async {
+    await _jsonRequest('/homes/$homeId', method: 'PATCH', body: {'name': name});
+  }
+
+  Future<void> deleteHome(int homeId) async {
+    await _jsonRequest('/homes/$homeId', method: 'DELETE');
+  }
+
+  Future<void> createRoom(int homeId, String name) async {
+    await _jsonRequest('/homes/$homeId/rooms', method: 'POST', body: {'name': name});
+  }
+
+  Future<void> renameRoom(int roomId, String name) async {
+    await _jsonRequest('/rooms/$roomId', method: 'PATCH', body: {'name': name});
+  }
+
+  Future<void> deleteRoom(int roomId) async {
+    await _jsonRequest('/rooms/$roomId', method: 'DELETE');
+  }
+
+  Future<void> moveDevice(int deviceId, {required int? homeId, required int? roomId}) async {
+    await _jsonRequest('/devices/$deviceId/profile', method: 'PUT', body: {'home_id': homeId, 'room_id': roomId});
+  }
+
+  String _messageFromResponse(http.Response response, String fallback) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['detail'] is String) {
+        return decoded['detail'] as String;
+      }
+    } catch (_) {}
+    return '$fallback (${response.statusCode})';
+  }
+
 }

@@ -15,25 +15,45 @@ class _AuthScreenState extends State<AuthScreen> {
   final password = TextEditingController();
   final firstName = TextEditingController();
   final lastName = TextEditingController();
+  String? formError;
 
   Future<void> submit() async {
+    final emailValue = email.text.trim();
+    final passwordValue = password.text;
+
+    if (emailValue.isEmpty ||
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(emailValue)) {
+      setState(() => formError = 'Please enter a valid email address.');
+      return;
+    }
+
+    if (registerMode && passwordValue.length < 8) {
+      setState(() => formError = 'Password must contain at least 8 characters.');
+      return;
+    }
+
+    if (!registerMode && passwordValue.isEmpty) {
+      setState(() => formError = 'Please enter your password.');
+      return;
+    }
+
+    setState(() => formError = null);
     try {
       final state = context.read<AppState>();
       if (registerMode) {
         await state.register(
-          email.text.trim(),
-          password.text,
+          emailValue,
+          passwordValue,
           firstName.text.trim(),
           lastName.text.trim(),
         );
       } else {
-        await state.login(email.text.trim(), password.text);
+        await state.login(emailValue, passwordValue);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() => formError = message);
     }
   }
 
@@ -97,7 +117,25 @@ class _AuthScreenState extends State<AuthScreen> {
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'Password'),
                 ),
-                const SizedBox(height: 18),
+                if (formError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(formError!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 6),
                 FilledButton(
                   onPressed: state.busy ? null : submit,
                   child: Padding(

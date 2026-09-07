@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../models/music_track.dart';
+import '../models/home.dart';
 import '../services/api_service.dart';
 
 class AppState extends ChangeNotifier {
@@ -13,6 +14,8 @@ class AppState extends ChangeNotifier {
   Map<String, dynamic>? profile;
   List<Device> devices = [];
   List<MusicTrack> music = [];
+  List<LilyHome> homes = [];
+  List<LilyRoom> rooms = [];
 
   bool get authenticated => api.token != null;
 
@@ -71,6 +74,9 @@ class AppState extends ChangeNotifier {
       await _storeToken(token);
       profile = await api.me();
       await refresh();
+    } catch (e) {
+      error = e.toString();
+      rethrow;
     } finally {
       busy = false;
       notifyListeners();
@@ -84,6 +90,8 @@ class AppState extends ChangeNotifier {
     profile = null;
     devices = [];
     music = [];
+    homes = [];
+    rooms = [];
     notifyListeners();
   }
 
@@ -91,6 +99,12 @@ class AppState extends ChangeNotifier {
     if (!authenticated) return;
     devices = await api.getDevices();
     music = await api.getMusic();
+    homes = await api.getHomes();
+    final loadedRooms = <LilyRoom>[];
+    for (final home in homes) {
+      loadedRooms.addAll(await api.getRooms(home.id));
+    }
+    rooms = loadedRooms;
     notifyListeners();
   }
 }

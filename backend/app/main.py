@@ -61,13 +61,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
+    allow_origins=[
+        origin.strip()
+        for origin in settings.cors_origins.split(",")
+        if origin.strip()
+    ],
+    # Flutter Web uses a random localhost port during development.
+    # Explicit production origins remain controlled by CORS_ORIGINS.
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
@@ -85,7 +91,7 @@ app.include_router(admin.router, prefix="/api/v1")
 def root():
     return {
         "name": settings.app_name,
-        "version": "0.5.0",
+        "version": "0.6.0",
         "docs": "/docs",
     }
 

@@ -122,6 +122,7 @@ bool activateWithBackend() {
   doc["device_secret"] = DEVICE_SECRET;
   doc["pairing_token"] = pairingToken;
   doc["firmware_version"] = FIRMWARE_VERSION;
+  doc["device_type_key"] = DEVICE_TYPE_KEY;
 
   String body;
   serializeJson(doc, body);
@@ -252,9 +253,11 @@ bool connectMqtt() {
 void beginProvisioningAccessPoint() {
   WiFi.mode(WIFI_AP_STA);
 
-  String apName = "LILY-" + String(DEVICE_SERIAL);
-  if (apName.length() > 20) {
-    apName = "LILY-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+  String serialSuffix = String(DEVICE_SERIAL);
+  if (serialSuffix.startsWith("LILY-")) serialSuffix = serialSuffix.substring(5);
+  String apName = "LILY-" + String(DEVICE_TYPE_AP_TAG) + "-" + serialSuffix;
+  if (apName.length() > 31) {
+    apName = "LILY-" + String(DEVICE_TYPE_AP_TAG) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
   }
 
   WiFi.softAP(apName.c_str());
@@ -265,10 +268,36 @@ void beginProvisioningAccessPoint() {
     JsonDocument doc;
     doc["serial"] = DEVICE_SERIAL;
     doc["model"] = "LILY-V1";
+    doc["device_type_key"] = DEVICE_TYPE_KEY;
+    doc["device_type_name"] = DEVICE_TYPE_NAME;
+    JsonArray capabilities = doc["capabilities"].to<JsonArray>();
+    capabilities.add("power");
+    capabilities.add("brightness");
+    capabilities.add("rgb");
+    capabilities.add("audio");
+    capabilities.add("volume");
     doc["firmware"] = FIRMWARE_VERSION;
     doc["configured"] = homeSsid.length() > 0;
     doc["audio_loaded"] = LittleFS.exists(AUDIO_CURRENT_PATH);
 
+    String output;
+    serializeJson(doc, output);
+    webServer.send(200, "application/json", output);
+  });
+
+  webServer.on("/networks", HTTP_GET, []() {
+    int count = WiFi.scanNetworks(false, true);
+    JsonDocument doc;
+    JsonArray items = doc["networks"].to<JsonArray>();
+    for (int i = 0; i < count; i++) {
+      String ssid = WiFi.SSID(i);
+      if (ssid.length() == 0) continue;
+      JsonObject item = items.add<JsonObject>();
+      item["ssid"] = ssid;
+      item["rssi"] = WiFi.RSSI(i);
+      item["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    }
+    WiFi.scanDelete();
     String output;
     serializeJson(doc, output);
     webServer.send(200, "application/json", output);
@@ -287,41 +316,50 @@ void beginProvisioningAccessPoint() {
       return;
     }
 
-    homeSsid = String((const char*)doc["ssid"]);
-    homePassword = String((const char*)doc["password"]);
-    pairingToken = String((const char*)doc["pairing_token"]);
+    String requestedSsid = String((const char*)doc["ssid"]);
+    String requestedPassword = String((const char*)doc["password"]);
+    String requestedPairingToken = String((const char*)doc["pairing_token"]);
 
-    if (homeSsid.isEmpty() || pairingToken.isEmpty()) {
-      webServer.send(400, "application/json", "{\"detail\":\"Missing configuration\"}");
+    if (requestedSsid.isEmpty() || requestedPairingToken.isEmpty()) {
+      webServer.send(400, "application/json", "{\"detail\":\"Missing Wi-Fi or pairing configuration\"}");
       return;
     }
 
-    saveConfig();
-    webServer.send(
-        200,
-        "application/json",
-        "{\"ok\":true,\"detail\":\"Joining home Wi-Fi\"}");
-
-    delay(400);
-
-    WiFi.begin(homeSsid.c_str(), homePassword.c_str());
+    WiFi.disconnect(false, false);
+    delay(200);
+    WiFi.begin(requestedSsid.c_str(), requestedPassword.c_str());
 
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
       delay(250);
     }
 
-    if (WiFi.status() == WL_CONNECTED) {
-      setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-      tzset();
-      configTime(0, 0, "pool.ntp.org", "time.google.com");
-
-      activateWithBackend();
-
-      if (!mqtt.connected()) {
-        connectMqtt();
-      }
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.disconnect(false, false);
+      webServer.send(422, "application/json",
+          "{\"detail\":\"Could not connect to the selected Wi-Fi. Check the password and try again. The Lily setup network is still available.\"}");
+      return;
     }
+
+    homeSsid = requestedSsid;
+    homePassword = requestedPassword;
+    pairingToken = requestedPairingToken;
+
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    tzset();
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+
+    if (!activateWithBackend()) {
+      webServer.send(502, "application/json",
+          "{\"detail\":\"Wi-Fi connected, but Lily could not register with the server. Check backend connectivity and retry.\"}");
+      return;
+    }
+
+    saveConfig();
+    if (!mqtt.connected()) connectMqtt();
+
+    webServer.send(200, "application/json",
+        "{\"ok\":true,\"detail\":\"Device connected and registered successfully.\"}");
   });
 
   webServer.on(
