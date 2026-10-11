@@ -13,7 +13,7 @@ RUN pip install -r requirements.txt \
 
 COPY --chown=lily:lily app ./app
 USER lily
-EXPOSE 8000
+EXPOSE 6100
 
 # A single worker owns the backend's fixed MQTT client ID.
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "6100", "--workers", "1"]

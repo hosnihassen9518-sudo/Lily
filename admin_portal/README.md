@@ -22,7 +22,7 @@ React/Vite administration interface for Lily Device Platform.
 ## Requirements
 
 - Node.js 20+ recommended
-- Lily FastAPI backend running on port 8000
+- Lily FastAPI backend running on port 6100
 
 ## Start on Windows
 
@@ -44,14 +44,17 @@ http://localhost:5173
 The default API is:
 
 ```text
-http://127.0.0.1:8000/api/v1
+http://127.0.0.1:6100/api/v1
 ```
 
 To use another backend address, edit `.env`:
 
 ```text
-VITE_API_BASE_URL=http://192.168.1.20:8000/api/v1
+VITE_API_BASE_URL=http://192.168.1.20:6100/api/v1
 ```
+
+Use the Nginx proxy for same-origin browser requests in the production portal.
+The Docker production build uses the relative `/api/v1` address on its own origin.
 
 ## Default development administrator
 

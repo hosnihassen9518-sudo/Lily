@@ -34,11 +34,15 @@ cp .env.example .env
 python run.py
 ```
 
-Open:
+The backend listens on port 6100. When running the Docker stack, you can also
+open the API docs through Nginx:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:6080/docs
 ```
+
+For a standalone backend, open `http://127.0.0.1:6100/docs` or verify it using
+`curl http://127.0.0.1:6100/health`.
 
 The SQLite database is automatically created as:
 

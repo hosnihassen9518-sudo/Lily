@@ -6,11 +6,11 @@ Start the Lily FastAPI backend, MQTT broker, and admin portal together with `doc
 
 ## Services
 
-- `backend`: built from a new `backend/Dockerfile`, using Python 3.12 slim, the existing requirements, and one Uvicorn worker bound to port 8000. Run without development reload. One worker avoids duplicate MQTT clients using the fixed `lily-backend` client ID.
+- `backend`: built from a new `backend/Dockerfile`, using Python 3.12 slim, the existing requirements, and one Uvicorn worker bound to port 6100. Run without development reload. One worker avoids duplicate MQTT clients using the fixed `lily-backend` client ID.
 - `mqtt`: the official `eclipse-mosquitto:2` image, with a repository-owned Mosquitto configuration listening on port 1883. A custom MQTT image is unnecessary.
-- `admin`: built with Node 22 and served with Nginx on internal port 80. Bake `/api/v1` into the portal and proxy `/api/` to `backend:8000`, preserving the request path. Support SPA routes and provide `/healthz` for container health.
+- `admin`: built with Node 22 and served with Nginx on internal port 6080. Bake `/api/v1` into the portal and proxy `/api/` to `backend:6100`, preserving the request path. Also proxy `/docs`, `/redoc`, and `/openapi.json` for convenient browser access. Support SPA routes and provide `/healthz` for container health.
 
-The backend uses `MQTT_ENABLED=true`, `MQTT_HOST=mqtt`, and port 1883 over the Compose network. Phones and ESP32 devices use the Ubuntu server's LAN IP and the published backend and MQTT ports. Root `.env` variables `ADMIN_PORT`, `BACKEND_PORT`, and `MQTT_PORT` configure host ports, defaulting to 80, 8000, and 1883; `BIND_ADDRESS` defaults to `0.0.0.0`. Internal service ports remain fixed. Changing host ports requires recreating containers, not rebuilding images.
+The backend uses `MQTT_ENABLED=true`, `MQTT_HOST=mqtt`, and port 1883 over the Compose network. Phones and ESP32 devices use the Ubuntu server's LAN IP and the published backend and MQTT ports. Root `.env` variables `ADMIN_PORT`, `BACKEND_PORT`, and `MQTT_PORT` configure host ports, defaulting to 6080, 6100, and 1883; `BIND_ADDRESS` defaults to `0.0.0.0`. Internal service ports remain fixed. Changing host ports requires recreating containers, not rebuilding images.
 
 ## Configuration and persistence
 

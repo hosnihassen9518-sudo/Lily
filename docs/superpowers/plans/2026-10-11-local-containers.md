@@ -12,7 +12,7 @@
 
 ## Constraints and review focus
 
-- Keep internal ports 80, 8000, and 1883 fixed; expose configurable host ports.
+- Keep internal ports 6080, 6100, and 1883 fixed; expose configurable host ports.
 - Require root environment JWT secret and admin password. Exclude environment files, caches, databases, and dependency directories from image contexts.
 - One backend worker; no development reload. Run backend as a non-root user with writable persistent storage.
 - Preserve `/api/v1` proxy paths, support SPA fallback, and resolve backend DNS after recreation.

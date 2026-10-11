@@ -10,11 +10,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Swagger:
+Swagger for the standalone backend:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:6100/docs
 ```
+
+For a standalone backend, use `curl http://127.0.0.1:6100/health` to verify it.
 
 ## 2. Admin portal
 
@@ -52,7 +54,7 @@ Build/upload using PlatformIO.
 cd mobile_app
 flutter create . --platforms=android,ios,web
 flutter pub get
-flutter run --dart-define=BACKEND_URL=http://YOUR_PC_LAN_IP:8000/api/v1
+flutter run --dart-define=BACKEND_URL=http://YOUR_PC_LAN_IP:6100/api/v1
 ```
 
 ## Full pairing flow

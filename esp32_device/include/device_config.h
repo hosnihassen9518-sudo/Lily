@@ -7,7 +7,7 @@
 
 // Development server configuration:
 #define BACKEND_HOST        "192.168.1.100"
-#define BACKEND_PORT        8000
+#define BACKEND_PORT        6100
 
 #define MQTT_HOST           "192.168.1.100"
 #define MQTT_PORT           1883

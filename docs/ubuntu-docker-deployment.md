@@ -28,8 +28,8 @@ Change the published ports if desired:
 
 ```dotenv
 BIND_ADDRESS=0.0.0.0
-ADMIN_PORT=8080
-BACKEND_PORT=8000
+ADMIN_PORT=6080
+BACKEND_PORT=6100
 MQTT_PORT=1883
 ```
 
@@ -53,19 +53,22 @@ For a server at `192.168.1.100` and the example ports above:
 
 | Client | Address |
 | --- | --- |
-| Admin portal | `http://192.168.1.100:8080` |
-| Backend API docs | `http://192.168.1.100:8000/docs` |
-| Backend health | `http://192.168.1.100:8000/health` |
+| Admin portal | `http://192.168.1.100:6080` |
+| Backend API docs (browser, through Nginx) | `http://192.168.1.100:6080/docs` |
+| Backend health | `http://192.168.1.100:6100/health` |
 | MQTT clients | `192.168.1.100:1883` |
 
 Log into the portal with the initial admin email/password from the root `.env`.
 The portal sends requests to `/api/v1` on its own origin; Nginx forwards these
-to `backend:8000`. It works with any `ADMIN_PORT` without rebuilding its API URL.
+to `backend:6100`. It works with any `ADMIN_PORT` without rebuilding its API URL.
+
+Browser clients may also use `http://192.168.1.100:6080/api/v1` through the portal
+proxy. Native mobile clients and ESP32 devices use the published backend port 6100.
 
 For the mobile application, use the published backend address:
 
 ```bash
-flutter build apk --release --dart-define=BACKEND_URL=http://192.168.1.100:8000/api/v1
+flutter build apk --release --dart-define=BACKEND_URL=http://192.168.1.100:6100/api/v1
 ```
 
 In the ESP32 configuration set `BACKEND_HOST` and `MQTT_HOST` to the server LAN IP,
@@ -81,8 +84,8 @@ Browser clients calling the backend directly need their origin added to
 ## Verification
 
 ```bash
-curl --fail http://192.168.1.100:8000/health
-curl --fail http://192.168.1.100:8080/healthz
+curl --fail http://192.168.1.100:6100/health
+curl --fail http://192.168.1.100:6080/healthz
 docker compose exec mqtt mosquitto_pub -h localhost -t lily/manual-check -m ok -q 1
 docker compose logs --tail=100 backend
 ```
@@ -109,6 +112,11 @@ docker compose up -d --build
 # Stop and remove containers while preserving named volumes:
 docker compose down
 ```
+
+When upgrading from the previous 8000/80 setup, change existing root `.env` values
+to `BACKEND_PORT=6100` and `ADMIN_PORT=6080`, then rebuild with
+`docker compose up -d --build`. Update phone builds and ESP32 configuration to
+use the new backend port. The named volumes remain intact.
 
 Do not use `docker compose down -v` unless you intend to delete stored data.
 Keep one backend replica/worker: the backend uses a fixed MQTT client ID and SQLite.

@@ -40,19 +40,19 @@ For a physical phone, the backend must be reachable on your LAN.
 Example:
 
 ```powershell
-flutter run --dart-define=BACKEND_URL=http://192.168.1.50:8000/api/v1
+flutter run --dart-define=BACKEND_URL=http://192.168.1.50:6100/api/v1
 ```
 
 For Android emulator:
 
 ```powershell
-flutter run --dart-define=BACKEND_URL=http://10.0.2.2:8000/api/v1
+flutter run --dart-define=BACKEND_URL=http://10.0.2.2:6100/api/v1
 ```
 
 For Flutter Web on the same PC:
 
 ```powershell
-flutter run -d chrome --dart-define=BACKEND_URL=http://127.0.0.1:8000/api/v1
+flutter run -d chrome --dart-define=BACKEND_URL=http://127.0.0.1:6100/api/v1
 ```
 
 ## Android Wi-Fi permissions
