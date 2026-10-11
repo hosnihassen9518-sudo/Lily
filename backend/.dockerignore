@@ -1,0 +1,12 @@
+# Only application sources and dependency metadata belong in the image.
+**
+!Dockerfile
+!requirements.txt
+!app/
+!app/**
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.env
+**/.env.*
+**/*.db
