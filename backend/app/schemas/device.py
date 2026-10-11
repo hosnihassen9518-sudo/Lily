@@ -10,6 +10,10 @@ class DeviceClaim(BaseModel):
     serial_number: str
     name: str | None = None
 
+
+class DeviceRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
 class DeviceActivate(BaseModel):
     serial_number: str
     device_secret: str

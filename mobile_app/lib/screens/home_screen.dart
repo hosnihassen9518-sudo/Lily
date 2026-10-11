@@ -51,7 +51,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = width > 1150 ? 3 : width > 720 ? 2 : 1;
+        final columns = width > 1150
+            ? 3
+            : width > 720
+                ? 2
+                : 1;
         return GridView.count(
           crossAxisCount: columns,
           shrinkWrap: true,
@@ -65,7 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _roomSection(BuildContext context, String title, List<Device> devices) {
+  Widget _roomSection(
+      BuildContext context, String title, List<Device> devices) {
     if (devices.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
@@ -76,9 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const Icon(Icons.meeting_room_outlined, size: 20),
               const SizedBox(width: 7),
-              Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(width: 8),
-              Text('${devices.length}', style: TextStyle(color: Colors.grey.shade600)),
+              Text('${devices.length}',
+                  style: TextStyle(color: Colors.grey.shade600)),
             ],
           ),
           const SizedBox(height: 10),
@@ -105,7 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const Icon(Icons.devices_other, size: 48),
                     const SizedBox(height: 12),
-                    const Text('No Lily device yet', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text('No Lily device yet',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       kIsWeb
@@ -124,22 +135,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final sections = <Widget>[];
     for (final home in state.homes) {
-      final homeDevices = state.devices.where((d) => d.homeId == home.id).toList();
+      final homeDevices =
+          state.devices.where((d) => d.homeId == home.id).toList();
       if (homeDevices.isEmpty) continue;
       sections.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Text(home.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          child: Text(home.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800)),
         ),
       );
       final rooms = state.rooms.where((r) => r.homeId == home.id).toList();
       for (final room in rooms) {
-        sections.add(_roomSection(context, room.name, homeDevices.where((d) => d.roomId == room.id).toList()));
+        sections.add(_roomSection(context, room.name,
+            homeDevices.where((d) => d.roomId == room.id).toList()));
       }
-      sections.add(_roomSection(context, 'No room', homeDevices.where((d) => d.roomId == null).toList()));
+      sections.add(_roomSection(context, 'No room',
+          homeDevices.where((d) => d.roomId == null).toList()));
     }
     final unassigned = state.devices.where((d) => d.homeId == null).toList();
-    if (unassigned.isNotEmpty) sections.add(_roomSection(context, 'Unassigned devices', unassigned));
+    if (unassigned.isNotEmpty) {
+      sections.add(_roomSection(context, 'Unassigned devices', unassigned));
+    }
 
     return RefreshIndicator(
       onRefresh: state.refresh,
@@ -157,22 +177,27 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('My devices', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+              Text('My devices',
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
-              Text('Devices are grouped by home and room.', style: TextStyle(color: Colors.grey.shade600)),
+              Text('Devices are grouped by home and room.',
+                  style: TextStyle(color: Colors.grey.shade600)),
             ],
           ),
         ),
         OutlinedButton.icon(
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HomeManagementScreen())),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const HomeManagementScreen())),
           icon: const Icon(Icons.home_work_outlined),
           label: const Text('Homes & rooms'),
         ),
         if (!kIsWeb) ...[
           const SizedBox(width: 8),
           FilledButton.icon(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PairDeviceScreen()))
-                .then((_) => context.read<AppState>().refresh()),
+            onPressed: _addDevice,
             icon: const Icon(Icons.add),
             label: const Text('Add'),
           ),
@@ -181,14 +206,29 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _addDevice() async {
+    final added = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const PairDeviceScreen()));
+    if (!mounted) return;
+    if (added == true) {
+      setState(() => index = 0);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Device added successfully')));
+    }
+  }
+
   Widget _accountPage(BuildContext context) {
     final state = context.watch<AppState>();
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text(state.profile?['email']?.toString() ?? '', style: Theme.of(context).textTheme.titleMedium),
+        Text(state.profile?['email']?.toString() ?? '',
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 14),
-        OutlinedButton.icon(onPressed: state.logout, icon: const Icon(Icons.logout), label: const Text('Sign out')),
+        OutlinedButton.icon(
+            onPressed: state.logout,
+            icon: const Icon(Icons.logout),
+            label: const Text('Sign out')),
       ],
     );
   }
@@ -204,7 +244,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (kIsWeb) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
+        appBar: AppBar(
+            title: const Text('Lily'),
+            actions: const [BackendSettingsButton()]),
         body: Row(
           children: [
             NavigationRail(
@@ -213,13 +255,27 @@ class _HomeScreenState extends State<HomeScreen> {
               onDestinationSelected: (value) => setState(() => index = value),
               leading: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 18),
-                child: CircleAvatar(child: Text('L', style: TextStyle(fontWeight: FontWeight.w900))),
+                child: CircleAvatar(
+                    child: Text('L',
+                        style: TextStyle(fontWeight: FontWeight.w900))),
               ),
               destinations: const [
-                NavigationRailDestination(icon: Icon(Icons.devices_outlined), selectedIcon: Icon(Icons.devices), label: Text('My devices')),
-                NavigationRailDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work), label: Text('Homes & rooms')),
-                NavigationRailDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music), label: Text('Music')),
-                NavigationRailDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: Text('Account')),
+                NavigationRailDestination(
+                    icon: Icon(Icons.devices_outlined),
+                    selectedIcon: Icon(Icons.devices),
+                    label: Text('My devices')),
+                NavigationRailDestination(
+                    icon: Icon(Icons.home_work_outlined),
+                    selectedIcon: Icon(Icons.home_work),
+                    label: Text('Homes & rooms')),
+                NavigationRailDestination(
+                    icon: Icon(Icons.library_music_outlined),
+                    selectedIcon: Icon(Icons.library_music),
+                    label: Text('Music')),
+                NavigationRailDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: Text('Account')),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -230,16 +286,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
+      appBar: AppBar(
+          title: const Text('Lily'), actions: const [BackendSettingsButton()]),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.devices_outlined), selectedIcon: Icon(Icons.devices), label: 'Devices'),
-          NavigationDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music), label: 'Music'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Account'),
+          NavigationDestination(
+              icon: Icon(Icons.devices_outlined),
+              selectedIcon: Icon(Icons.devices),
+              label: 'Devices'),
+          NavigationDestination(
+              icon: Icon(Icons.home_work_outlined),
+              selectedIcon: Icon(Icons.home_work),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.library_music_outlined),
+              selectedIcon: Icon(Icons.library_music),
+              label: 'Music'),
+          NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Account'),
         ],
       ),
     );

@@ -34,7 +34,8 @@ def bootstrap():
             db.add(Home(owner_id=admin_user.id, name="Admin Home", timezone="Europe/Paris"))
 
         defaults = [
-            ("lily_audio_light", "Lily Audio Light", ["power", "brightness", "rgb", "audio", "volume"]),
+            ("lily_audio_light", "Lily Audio Light", ["power", "light", "brightness", "rgb", "audio", "volume"]),
+            ("test_light", "Lily Test Light", ["power", "light"]),
             ("smart_light", "Smart Light", ["power", "brightness", "rgb"]),
             ("environment_sensor", "Environment Sensor", ["temperature", "humidity", "battery"]),
             ("plant_sensor", "Plant Sensor", ["temperature", "humidity", "soil_moisture", "battery"]),
@@ -61,7 +62,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.6.0",
+    version="0.6.1",
     lifespan=lifespan,
 )
 
@@ -91,7 +92,7 @@ app.include_router(admin.router, prefix="/api/v1")
 def root():
     return {
         "name": settings.app_name,
-        "version": "0.6.0",
+        "version": "0.6.1",
         "docs": "/docs",
     }
 

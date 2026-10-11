@@ -72,3 +72,8 @@ See `docs/development_flow.md` for startup order.
 ## V0.6
 
 V0.6 adds room-grouped device widgets, capability-aware device controls, responsive web/mobile navigation, inline validation, and mobile-only Lily Wi-Fi provisioning with credential verification. See `docs/v0.6-ux-provisioning.md`.
+
+
+## V0.6.1 test-light
+
+For the first physical integration test, use `esp32_test_light/`. It is based on the V0.6 provisioning/MQTT flow and drives one normal LED through GPIO18. See `docs/v0.6.1-test-light.md`.

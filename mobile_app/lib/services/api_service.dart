@@ -28,13 +28,16 @@ class ApiService {
 
     switch (method) {
       case 'POST':
-        pendingResponse = _client.post(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse =
+            _client.post(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'PUT':
-        pendingResponse = _client.put(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse =
+            _client.put(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'PATCH':
-        pendingResponse = _client.patch(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse =
+            _client.patch(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'DELETE':
         pendingResponse = _client.delete(uri, headers: _headers);
@@ -121,7 +124,9 @@ class ApiService {
 
   Future<List<Device>> getDevices() async {
     final uri = Uri.parse('$baseUrl/devices');
-    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load devices (${response.statusCode})');
     }
@@ -137,14 +142,25 @@ class ApiService {
   }
 
   Future<void> setDeviceState(int deviceId, Map<String, dynamic> state) async {
-    await _jsonRequest('/devices/$deviceId/state', method: 'PUT', body: {'state': state});
+    await _jsonRequest('/devices/$deviceId/state',
+        method: 'PUT', body: {'state': state});
   }
 
-  Future<void> genericCommand(int deviceId, String type, Map<String, dynamic> payload) async {
-    await _jsonRequest('/devices/$deviceId/command', method: 'POST', body: {
+  Future<void> genericCommand(
+      int deviceId, String type, Map<String, dynamic> payload) async {
+    final result =
+        await _jsonRequest('/devices/$deviceId/command', method: 'POST', body: {
       'type': type,
       'payload': payload,
     });
+    _checkCommandPublished(result);
+  }
+
+  void _checkCommandPublished(Map<String, dynamic> result) {
+    if (result['mqtt_published'] == false) {
+      throw Exception(
+          'Command could not be sent to MQTT. Check the backend broker connection and try again.');
+    }
   }
 
   Future<void> setLight(
@@ -155,7 +171,7 @@ class ApiService {
     required int g,
     required int b,
   }) async {
-    await _jsonRequest(
+    final result = await _jsonRequest(
       '/devices/$deviceId/light',
       method: 'PUT',
       body: {
@@ -166,6 +182,7 @@ class ApiService {
         'b': b,
       },
     );
+    _checkCommandPublished(result);
   }
 
   Future<void> playAudio(int deviceId) async {
@@ -186,13 +203,16 @@ class ApiService {
 
   Future<List<MusicTrack>> getMusic() async {
     final uri = Uri.parse('$baseUrl/music');
-    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load music (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
-        .map((item) => MusicTrack.fromJson((item as Map).cast<String, dynamic>()))
+        .map((item) =>
+            MusicTrack.fromJson((item as Map).cast<String, dynamic>()))
         .toList();
   }
 
@@ -201,7 +221,9 @@ class ApiService {
     final headers = {
       if (token != null) 'Authorization': 'Bearer $token',
     };
-    final response = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Music download failed (${response.statusCode})');
     }
@@ -212,7 +234,9 @@ class ApiService {
     final uri = Uri.parse(
       '$baseUrl/schedules/device/$deviceId',
     );
-    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load schedules (${response.statusCode})');
     }
@@ -243,28 +267,38 @@ class ApiService {
   Future<void> deleteSchedule(int scheduleId) async {
     await _jsonRequest('/schedules/$scheduleId', method: 'DELETE');
   }
+
   Future<List<LilyHome>> getHomes() async {
     final uri = Uri.parse('$baseUrl/homes');
-    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception(_messageFromResponse(response, 'Could not load homes'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => LilyHome.fromJson((e as Map).cast<String, dynamic>())).toList();
+    return list
+        .map((e) => LilyHome.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
   }
 
   Future<List<LilyRoom>> getRooms(int homeId) async {
     final uri = Uri.parse('$baseUrl/homes/$homeId/rooms');
-    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception(_messageFromResponse(response, 'Could not load rooms'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((e) => LilyRoom.fromJson((e as Map).cast<String, dynamic>())).toList();
+    return list
+        .map((e) => LilyRoom.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
   }
 
   Future<void> createHome(String name) async {
-    await _jsonRequest('/homes', method: 'POST', body: {'name': name, 'timezone': 'Europe/Paris'});
+    await _jsonRequest('/homes',
+        method: 'POST', body: {'name': name, 'timezone': 'Europe/Paris'});
   }
 
   Future<void> renameHome(int homeId, String name) async {
@@ -276,7 +310,8 @@ class ApiService {
   }
 
   Future<void> createRoom(int homeId, String name) async {
-    await _jsonRequest('/homes/$homeId/rooms', method: 'POST', body: {'name': name});
+    await _jsonRequest('/homes/$homeId/rooms',
+        method: 'POST', body: {'name': name});
   }
 
   Future<void> renameRoom(int roomId, String name) async {
@@ -287,8 +322,15 @@ class ApiService {
     await _jsonRequest('/rooms/$roomId', method: 'DELETE');
   }
 
-  Future<void> moveDevice(int deviceId, {required int? homeId, required int? roomId}) async {
-    await _jsonRequest('/devices/$deviceId/profile', method: 'PUT', body: {'home_id': homeId, 'room_id': roomId});
+  Future<void> moveDevice(int deviceId,
+      {required int? homeId, required int? roomId}) async {
+    await _jsonRequest('/devices/$deviceId/profile',
+        method: 'PUT', body: {'home_id': homeId, 'room_id': roomId});
+  }
+
+  Future<void> renameDevice(int deviceId, String name) async {
+    await _jsonRequest('/devices/$deviceId',
+        method: 'PATCH', body: {'name': name.trim()});
   }
 
   String _messageFromResponse(http.Response response, String fallback) {
@@ -300,5 +342,4 @@ class ApiService {
     } catch (_) {}
     return '$fallback (${response.statusCode})';
   }
-
 }

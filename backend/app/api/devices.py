@@ -16,6 +16,7 @@ from app.schemas.device import (
     DeviceActivate,
     DeviceClaim,
     DeviceCreate,
+    DeviceRename,
     LightCommand,
     VolumeCommand,
 )
@@ -134,6 +135,25 @@ def my_devices(
     ).all()
 
     return [serialize_device(d, db) for d in devices]
+
+@router.patch("/{device_id}")
+def rename_device(
+    device_id: int,
+    payload: DeviceRename,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    device = db.get(Device, device_id)
+    if not device or device.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Device name cannot be empty")
+    device.name = name
+    db.commit()
+    db.refresh(device)
+    return serialize_device(device, db)
+
 
 @router.post("/claim")
 def claim_device(

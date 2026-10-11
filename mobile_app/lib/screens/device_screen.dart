@@ -49,6 +49,34 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
   }
 
+  Future<void> _renameDevice(Device d) async {
+    final controller = TextEditingController(text: d.displayName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename device'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 120,
+          decoration: const InputDecoration(labelText: 'Device name'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name == d.displayName) return;
+    await _run(() => context.read<AppState>().api.renameDevice(d.id, name));
+  }
+
   Future<void> pushLight() async {
     final d = device;
     if (d == null) return;
@@ -77,7 +105,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(d.displayName),
-        actions: [IconButton(onPressed: state.refresh, icon: const Icon(Icons.refresh))],
+        actions: [
+          IconButton(onPressed: () => _renameDevice(d), icon: const Icon(Icons.edit), tooltip: 'Rename device'),
+          IconButton(onPressed: state.refresh, icon: const Icon(Icons.refresh)),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),

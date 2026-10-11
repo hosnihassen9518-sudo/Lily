@@ -1,15 +1,32 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:wifi_iot/wifi_iot.dart';
 import '../config.dart';
 
 class ProvisionService {
+  ProvisionService({http.Client? client}) : _client = client ?? http.Client();
+  final http.Client _client;
+
+  Future<String> connectWithPairingToken(
+    String ssid,
+    Future<String> Function() createPairingToken,
+  ) async {
+    // A LAN backend cannot be reached after switching to the ESP32 setup AP.
+    final token = await createPairingToken();
+    if (!await connectToDeviceAp(ssid)) {
+      throw Exception('Could not join the Lily setup network.');
+    }
+    return token;
+  }
+
   Future<List<String>> scanLilyNetworks() async {
     try {
       final networks = await WiFiForIoTPlugin.loadWifiList();
       final names = <String>{};
-      for (final network in networks ?? const <WifiNetwork>[]) {
+      for (final network in networks) {
         final ssid = network.ssid?.trim() ?? '';
         if (ssid.toUpperCase().startsWith('LILY-')) names.add(ssid);
       }
@@ -26,34 +43,64 @@ class ProvisionService {
     if (!ssid.toUpperCase().startsWith('LILY-')) {
       throw Exception('Only Lily setup networks can be provisioned.');
     }
-    return WiFiForIoTPlugin.connect(
+    final connected = await WiFiForIoTPlugin.connect(
       ssid,
       security: NetworkSecurity.NONE,
       joinOnce: true,
       withInternet: false,
     );
+    debugPrint('Lily setup: Wi-Fi join completed=$connected');
+    if (!connected) return false;
+    try {
+      if (!await WiFiForIoTPlugin.forceWifiUsage(true)) {
+        throw Exception('Could not route requests through the Lily setup Wi-Fi.');
+      }
+      debugPrint('Lily setup: Wi-Fi routing bound successfully');
+    } catch (_) {
+      await disconnectFromDeviceAp();
+      rethrow;
+    }
+    return true;
   }
 
   Future<void> disconnectFromDeviceAp() async {
     try {
+      await WiFiForIoTPlugin.forceWifiUsage(false);
+    } finally {
+      try {
       await WiFiForIoTPlugin.disconnect();
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   Future<Map<String, dynamic>> getDeviceInfo() async {
-    final response = await http
-        .get(Uri.parse('${AppConfig.esp32ProvisionUrl}/info'))
-        .timeout(const Duration(seconds: 7));
-
-    if (response.statusCode != 200) {
-      throw Exception('Could not contact the Lily device.');
+    Object? lastFailure;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await _client
+            .get(Uri.parse('${AppConfig.esp32ProvisionUrl}/info'))
+            .timeout(const Duration(seconds: 7));
+        if (response.statusCode != 200) {
+          throw Exception('The Lily device returned HTTP ${response.statusCode}.');
+        }
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } on TimeoutException catch (error) {
+        lastFailure = error;
+        debugPrint('Lily setup: /info attempt ${attempt + 1}: $error');
+        // Android may finish routing shortly after the Wi-Fi join completes.
+      } on http.ClientException catch (error) {
+        lastFailure = error;
+        debugPrint('Lily setup: /info attempt ${attempt + 1}: $error');
+        // Retry a transient local connection failure, never a provisioning POST.
+      }
+      if (attempt < 2) await Future<void>.delayed(const Duration(seconds: 1));
     }
-
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    throw Exception('Connected to setup Wi-Fi, but the ESP32 did not answer at '
+        '${AppConfig.esp32ProvisionUrl}/info. Last connection error: $lastFailure');
   }
 
   Future<List<Map<String, dynamic>>> getNearbyHomeNetworks() async {
-    final response = await http
+    final response = await _client
         .get(Uri.parse('${AppConfig.esp32ProvisionUrl}/networks'))
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
@@ -81,7 +128,7 @@ class ProvisionService {
     required String wifiPassword,
     required String pairingToken,
   }) async {
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('${AppConfig.esp32ProvisionUrl}/provision'),
           headers: {'Content-Type': 'application/json'},
