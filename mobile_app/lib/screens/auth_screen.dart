@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../widgets/backend_settings_button.dart';
+import '../widgets/lily_logo.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -29,7 +30,8 @@ class _AuthScreenState extends State<AuthScreen> {
     }
 
     if (registerMode && passwordValue.length < 8) {
-      setState(() => formError = 'Password must contain at least 8 characters.');
+      setState(
+          () => formError = 'Password must contain at least 8 characters.');
       return;
     }
 
@@ -63,7 +65,8 @@ class _AuthScreenState extends State<AuthScreen> {
     final state = context.watch<AppState>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
+      appBar: AppBar(
+          title: const LilyLogo(), actions: const [BackendSettingsButton()]),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -72,13 +75,11 @@ class _AuthScreenState extends State<AuthScreen> {
               padding: const EdgeInsets.all(28),
               shrinkWrap: true,
               children: [
-                const CircleAvatar(
-                  radius: 34,
-                  child: Text(
-                    'L',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 28),
-                  ),
-                ),
+                Center(
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(32),
+                        child: Image.asset('assets/images/lily_cloud.png',
+                            width: 140, height: 140))),
                 const SizedBox(height: 24),
                 Text(
                   registerMode ? 'Create your Lily account' : 'Welcome to Lily',
@@ -91,7 +92,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 Text(
                   registerMode
                       ? 'Create an account, then add your device in a few steps.'
-                      : 'Control lights, audio, and schedules from one place.',
+                      : 'A cozy home for lights, music, and little adventures.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
@@ -129,9 +130,16 @@ class _AuthScreenState extends State<AuthScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+                        Icon(Icons.error_outline,
+                            color:
+                                Theme.of(context).colorScheme.onErrorContainer),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(formError!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer))),
+                        Expanded(
+                            child: Text(formError!,
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onErrorContainer))),
                       ],
                     ),
                   ),

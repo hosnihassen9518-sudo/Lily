@@ -2,6 +2,23 @@
 
 One Flutter codebase for Android, iOS, and Web.
 
+## Lily Cloud design (0.8.0)
+
+The app uses one pastel lavender, sky blue, cream, and peach theme across its
+screens. The top bar includes the Lily cloud logo, home configuration, and
+server settings. Devices appear in two columns with a bundled anime cloud
+illustration, large controls, and readable connection badges.
+
+![Lily Cloud home screen with example devices](../docs/mobile-cloud-preview.png)
+
+Sign-in and server settings survive app restarts. The phone also caches the
+profile, homes, rooms, device configuration, and music catalog. An offline
+restart keeps the saved session and marks cached devices offline until a
+successful refresh. Pull down to reconnect. Logout or a server change clears
+the cached session. An expired token or a server rejection requires sign-in
+again; the app does not extend the server's token lifetime. Wi-Fi passwords
+are not stored in the session cache.
+
 ## Implemented
 
 - User registration

@@ -6,6 +6,14 @@ import '../models/device.dart';
 import '../models/music_track.dart';
 import '../models/home.dart';
 
+class ApiException implements Exception {
+  const ApiException(this.statusCode, this.message);
+  final int statusCode;
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -85,7 +93,7 @@ class ApiService {
         // Keep the status-code fallback when the server response is not JSON.
       }
 
-      throw Exception(message);
+      throw ApiException(response.statusCode, message);
     }
 
     if (response.body.isEmpty) return {};
@@ -128,7 +136,8 @@ class ApiService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw Exception('Could not load devices (${response.statusCode})');
+      throw ApiException(response.statusCode,
+          'Could not load devices (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -207,7 +216,8 @@ class ApiService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw Exception('Could not load music (${response.statusCode})');
+      throw ApiException(
+          response.statusCode, 'Could not load music (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -238,7 +248,8 @@ class ApiService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw Exception('Could not load schedules (${response.statusCode})');
+      throw ApiException(response.statusCode,
+          'Could not load schedules (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
@@ -274,7 +285,8 @@ class ApiService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw Exception(_messageFromResponse(response, 'Could not load homes'));
+      throw ApiException(response.statusCode,
+          _messageFromResponse(response, 'Could not load homes'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -288,7 +300,8 @@ class ApiService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw Exception(_messageFromResponse(response, 'Could not load rooms'));
+      throw ApiException(response.statusCode,
+          _messageFromResponse(response, 'Could not load rooms'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list

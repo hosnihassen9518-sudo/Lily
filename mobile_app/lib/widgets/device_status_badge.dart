@@ -29,14 +29,15 @@ class DeviceStatusBadge extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Text(
+          Flexible(
+              child: Text(
             normalized,
             style: TextStyle(
               color: color,
               fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
-          ),
+          )),
         ],
       ),
     );

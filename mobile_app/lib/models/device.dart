@@ -66,7 +66,9 @@ class Device {
       model: json['model'] as String? ?? 'LILY-V1',
       status: json['status'] as String? ?? 'OFFLINE',
       online: json['online'] as bool? ?? false,
-      lastSeen: json['last_seen'] == null ? null : DateTime.tryParse(json['last_seen'].toString()),
+      lastSeen: json['last_seen'] == null
+          ? null
+          : DateTime.tryParse(json['last_seen'].toString()),
       firmware: json['firmware_version'] as String?,
       wifiRssi: json['wifi_rssi'] as int?,
       freeStorage: json['free_storage'] as int?,
@@ -84,13 +86,54 @@ class Device {
       deviceTypeKey: smart['device_type_key']?.toString(),
       deviceTypeName: smart['device_type_name']?.toString(),
       capabilities: rawCaps.map((e) => e.toString()).toList(),
-      genericState: (json['generic_state'] as Map?)?.cast<String, dynamic>() ?? {},
+      genericState:
+          (json['generic_state'] as Map?)?.cast<String, dynamic>() ?? {},
     );
   }
 
-  String get displayName => name?.trim().isNotEmpty == true ? name! : (deviceTypeName ?? model);
-  bool hasCapability(String capability) => capabilities.isEmpty || capabilities.contains(capability);
-  bool get supportsLight => capabilities.contains('light') || (hasCapability('power') && (hasCapability('brightness') || hasCapability('rgb')));
+  String get displayName =>
+      name?.trim().isNotEmpty == true ? name! : (deviceTypeName ?? model);
+  bool hasCapability(String capability) =>
+      capabilities.isEmpty || capabilities.contains(capability);
+  bool get supportsLight =>
+      capabilities.contains('light') ||
+      (hasCapability('power') &&
+          (hasCapability('brightness') || hasCapability('rgb')));
   bool get supportsAudio => hasCapability('audio');
-  String? get currentTrackTitle => genericState['current_track_title']?.toString();
+  String? get currentTrackTitle =>
+      genericState['current_track_title']?.toString();
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'serial_number': serial,
+        'name': name,
+        'model': model,
+        'status': status,
+        'online': online,
+        'last_seen': lastSeen?.toIso8601String(),
+        'firmware_version': firmware,
+        'wifi_rssi': wifiRssi,
+        'free_storage': freeStorage,
+        'light': {
+          'enabled': lightEnabled,
+          'brightness': brightness,
+          'r': r,
+          'g': g,
+          'b': b
+        },
+        'audio': {
+          'loaded': audioLoaded,
+          'playing': audioPlaying,
+          'volume': volume
+        },
+        'smart_home': {
+          'home_id': homeId,
+          'room_id': roomId,
+          'device_type_id': deviceTypeId,
+          'device_type_key': deviceTypeKey,
+          'device_type_name': deviceTypeName,
+          'capabilities': capabilities
+        },
+        'generic_state': genericState,
+      };
 }

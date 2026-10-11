@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
@@ -36,8 +37,91 @@ class AppState extends ChangeNotifier {
   List<MusicTrack> music = [];
   List<LilyHome> homes = [];
   List<LilyRoom> rooms = [];
+  bool offline = false;
+
+  Future<void> _cacheSession() async {
+    final revision = _sessionRevision;
+    final prefs = await SharedPreferences.getInstance();
+    if (revision != _sessionRevision || !authenticated) return;
+    await prefs.setString(
+        'session_cache',
+        jsonEncode({
+          'server': api.baseUrl,
+          'token': api.token,
+          'profile': profile,
+          'devices': devices.map((d) => d.toJson()).toList(),
+          'homes': homes
+              .map((h) => {'id': h.id, 'name': h.name, 'timezone': h.timezone})
+              .toList(),
+          'rooms': rooms
+              .map((r) => {
+                    'id': r.id,
+                    'home_id': r.homeId,
+                    'name': r.name,
+                    'icon': r.icon
+                  })
+              .toList(),
+          'music': music
+              .map((m) => {
+                    'id': m.id,
+                    'title': m.title,
+                    'description': m.description,
+                    'filename': m.filename,
+                    'filesize': m.filesize,
+                    'checksum_sha256': m.checksum
+                  })
+              .toList(),
+        }));
+  }
+
+  void _restoreSession(String? saved) {
+    if (saved == null) return;
+    try {
+      final data = jsonDecode(saved) as Map<String, dynamic>;
+      if (data['server'] != api.baseUrl || data['token'] != api.token) return;
+      final cachedDevices = (data['devices'] as List)
+          .map((d) => Device.fromJson({
+                ...Map<String, dynamic>.from(d as Map),
+                'online': false,
+                'status': 'OFFLINE',
+              }))
+          .toList();
+      final cachedHomes = (data['homes'] as List)
+          .map((h) => LilyHome.fromJson(Map<String, dynamic>.from(h as Map)))
+          .toList();
+      final cachedRooms = (data['rooms'] as List)
+          .map((r) => LilyRoom.fromJson(Map<String, dynamic>.from(r as Map)))
+          .toList();
+      final cachedMusic = (data['music'] as List)
+          .map((m) => MusicTrack.fromJson(Map<String, dynamic>.from(m as Map)))
+          .toList();
+      profile = (data['profile'] as Map?)?.cast<String, dynamic>();
+      devices = cachedDevices;
+      homes = cachedHomes;
+      rooms = cachedRooms;
+      music = cachedMusic;
+      offline = true;
+    } catch (_) {
+      // Ignore incomplete or corrupt cache; the saved login can still reconnect.
+    }
+  }
 
   bool get authenticated => api.token != null;
+
+  bool _savedTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return false;
+      final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))) as Map;
+      final expires = payload['exp'];
+      return expires is num &&
+          expires <= DateTime.now().millisecondsSinceEpoch / 1000;
+    } catch (_) {
+      // The server remains responsible for token integrity and validation.
+      return false;
+    }
+  }
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -51,12 +135,22 @@ class AppState extends ChangeNotifier {
     }
     api.token = prefs.getString('access_token');
 
+    if (api.token != null && _savedTokenExpired(api.token!)) {
+      await logout();
+    }
+
     if (api.token != null) {
+      _restoreSession(prefs.getString('session_cache'));
       try {
         profile = await api.me();
         await refresh();
-      } catch (_) {
-        await logout();
+      } catch (e) {
+        if (e is ApiException && e.statusCode == 401) {
+          await logout();
+        } else {
+          offline = true;
+          error = 'Unable to connect. Showing saved configuration.';
+        }
       }
     }
 
@@ -119,14 +213,36 @@ class AppState extends ChangeNotifier {
     music = [];
     homes = [];
     rooms = [];
+    offline = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('session_cache');
     if (!await prefs.remove('access_token')) {
       throw StateError('Could not clear the saved session.');
     }
   }
 
   Future<void> refresh() async {
+    final revision = _sessionRevision;
+    try {
+      await _refresh();
+    } catch (e) {
+      if (revision != _sessionRevision) return;
+      if (e is ApiException && e.statusCode == 401) {
+        await logout();
+      } else {
+        offline = true;
+        error = 'Unable to connect. Pull down to try again.';
+        devices = devices
+            .map((d) => Device.fromJson(
+                {...d.toJson(), 'online': false, 'status': 'OFFLINE'}))
+            .toList();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _refresh() async {
     if (!authenticated) return;
     final revision = _sessionRevision;
     final loadedDevices = await api.getDevices();
@@ -144,6 +260,9 @@ class AppState extends ChangeNotifier {
     music = loadedMusic;
     homes = loadedHomes;
     rooms = loadedRooms;
+    offline = false;
+    error = null;
+    await _cacheSession();
     notifyListeners();
   }
 }

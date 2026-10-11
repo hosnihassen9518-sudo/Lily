@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:lily_mobile/state/app_state.dart';
 import 'package:lily_mobile/widgets/device_card.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('Home light control sends on then off without opening device',
       (tester) async {
     var enabled = false;
@@ -50,6 +52,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(commands, [true, false]);
     expect(find.text('Turn on'), findsOneWidget);
+  });
+
+  testWidgets('Power-only devices retain a quick off control', (tester) async {
+    final commands = <Map<String, dynamic>>[];
+    final device = Device.fromJson({
+      'id': 2,
+      'serial_number': 'plug',
+      'online': true,
+      'smart_home': {
+        'capabilities': ['power']
+      },
+    });
+    final api = ApiService(client: MockClient((request) async {
+      if (request.method == 'POST') {
+        commands.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response('{"mqtt_published":true}', 200);
+      }
+      return http.Response('[]', 200);
+    }))
+      ..token = 'saved';
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: AppState(api: api),
+        child: MaterialApp(
+            home: Scaffold(
+                body:
+                    SizedBox(width: 180, child: DeviceCard(device: device))))));
+    await tester.tap(find.text('Turn off'));
+    await tester.pumpAndSettle();
+    expect(commands.single, {
+      'type': 'power',
+      'payload': {'enabled': false}
+    });
   });
 
   test('Light and power commands report failed MQTT publishing', () async {
