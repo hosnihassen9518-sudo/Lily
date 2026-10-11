@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
-import '../models/home.dart';
 import '../state/app_state.dart';
 import '../widgets/device_card.dart';
+import '../widgets/backend_settings_button.dart';
 import 'home_management_screen.dart';
 import 'music_screen.dart';
 import 'pair_device_screen.dart';
@@ -204,6 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (kIsWeb) {
       return Scaffold(
+        appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
         body: Row(
           children: [
             NavigationRail(
@@ -229,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lily')),
+      appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,

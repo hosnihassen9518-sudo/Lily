@@ -35,6 +35,16 @@ The existing `lib/` and `pubspec.yaml` are kept.
 
 ## Backend address
 
+Tap the gear icon at the top right of the login screen or main screen to set
+the server IP address/hostname, port (default 6100), and HTTP/HTTPS protocol.
+The app adds `/api/v1` automatically and saves settings on this device across
+restarts. A saved address overrides the build-time `BACKEND_URL` default.
+Changing servers clears the current login and loaded devices; sign in again
+on the selected server. Saving the same address keeps your session.
+
+Use the Ubuntu server's LAN IP, not the container name `backend`. Backend
+settings do not change the ESP32's own server configuration.
+
 For a physical phone, the backend must be reachable on your LAN.
 
 Example:

@@ -17,6 +17,8 @@ class _MusicScreenState extends State<MusicScreen> {
 
   Future<void> installTrack(MusicTrack track) async {
     final state = context.read<AppState>();
+    final backendUrl = state.api.baseUrl;
+    bool isCurrentSession() => mounted && state.api.baseUrl == backendUrl;
 
     final audioDevices = state.devices.where((d) => d.supportsAudio).toList();
     if (audioDevices.isEmpty) {
@@ -50,7 +52,7 @@ class _MusicScreenState extends State<MusicScreen> {
           );
         },
       );
-      if (selected == null) return;
+      if (!isCurrentSession() || selected == null) return;
       targetDevice = audioDevices.firstWhere((d) => d.id == selected);
     }
 
@@ -61,13 +63,12 @@ class _MusicScreenState extends State<MusicScreen> {
 
     try {
       final bytes = await state.api.downloadMusic(track.id);
+      if (!isCurrentSession()) return;
 
       setState(() {
         status =
             'Downloaded. Connect your phone to the Lily device setup Wi-Fi, then continue.';
       });
-
-      if (!mounted) return;
 
       final proceed = await showDialog<bool>(
         context: context,
@@ -90,24 +91,27 @@ class _MusicScreenState extends State<MusicScreen> {
         ),
       );
 
-      if (proceed != true) return;
+      if (!isCurrentSession() || proceed != true) return;
 
       setState(() => status = 'Uploading to device...');
       await ProvisionService().uploadMp3(
         bytes: bytes,
         checksum: track.checksum,
       );
+      if (!isCurrentSession()) return;
 
       await state.api.setDeviceState(targetDevice.id, {
         ...targetDevice.genericState,
         'current_track_title': track.title,
       });
+      if (!isCurrentSession()) return;
       await state.refresh();
+      if (!isCurrentSession()) return;
       setState(() => status = '${track.title} installed on ${targetDevice.displayName}.');
     } catch (e) {
-      setState(() => status = e.toString());
+      if (isCurrentSession()) setState(() => status = e.toString());
     } finally {
-      setState(() => busy = false);
+      if (mounted) setState(() => busy = false);
     }
   }
 

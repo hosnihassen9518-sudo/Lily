@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
+import '../widgets/backend_settings_button.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -62,6 +63,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final state = context.watch<AppState>();
 
     return Scaffold(
+      appBar: AppBar(title: const Text('Lily'), actions: const [BackendSettingsButton()]),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

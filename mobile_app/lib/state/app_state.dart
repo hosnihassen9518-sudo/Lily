@@ -4,9 +4,29 @@ import '../models/device.dart';
 import '../models/music_track.dart';
 import '../models/home.dart';
 import '../services/api_service.dart';
+import '../models/backend_settings.dart';
 
 class AppState extends ChangeNotifier {
-  final api = ApiService();
+  AppState({ApiService? api}) : api = api ?? ApiService();
+  final ApiService api;
+  int _sessionRevision = 0;
+  BackendSettings get backendSettings => BackendSettings.fromUrl(api.baseUrl);
+
+  Future<void> saveBackendSettings(BackendSettings settings) async {
+    if (busy) throw StateError('Wait for the current request to finish.');
+    final prefs = await SharedPreferences.getInstance();
+    final changed = settings.baseUrl != backendSettings.baseUrl;
+    // Remove the old server's persisted token before persisting a new server.
+    if (changed) await logout();
+    if (!await prefs.setString('backend_base_url', settings.baseUrl)) {
+      throw StateError('Could not save backend settings.');
+    }
+    if (changed) {
+      api.baseUrl = settings.baseUrl;
+      error = null;
+    }
+    notifyListeners();
+  }
 
   bool initialized = false;
   bool busy = false;
@@ -21,6 +41,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedUrl = prefs.getString('backend_base_url');
+    if (savedUrl != null) {
+      try {
+        api.baseUrl = BackendSettings.fromUrl(savedUrl).baseUrl;
+      } on FormatException {
+        await prefs.remove('backend_base_url');
+      }
+    }
     api.token = prefs.getString('access_token');
 
     if (api.token != null) {
@@ -84,8 +112,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
+    _sessionRevision++;
     api.token = null;
     profile = null;
     devices = [];
@@ -93,17 +120,29 @@ class AppState extends ChangeNotifier {
     homes = [];
     rooms = [];
     notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.remove('access_token')) {
+      throw StateError('Could not clear the saved session.');
+    }
   }
 
   Future<void> refresh() async {
     if (!authenticated) return;
-    devices = await api.getDevices();
-    music = await api.getMusic();
-    homes = await api.getHomes();
+    final revision = _sessionRevision;
+    final loadedDevices = await api.getDevices();
+    if (revision != _sessionRevision) return;
+    final loadedMusic = await api.getMusic();
+    if (revision != _sessionRevision) return;
+    final loadedHomes = await api.getHomes();
+    if (revision != _sessionRevision) return;
     final loadedRooms = <LilyRoom>[];
-    for (final home in homes) {
+    for (final home in loadedHomes) {
       loadedRooms.addAll(await api.getRooms(home.id));
+      if (revision != _sessionRevision) return;
     }
+    devices = loadedDevices;
+    music = loadedMusic;
+    homes = loadedHomes;
     rooms = loadedRooms;
     notifyListeners();
   }

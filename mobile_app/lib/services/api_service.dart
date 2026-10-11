@@ -7,6 +7,10 @@ import '../models/music_track.dart';
 import '../models/home.dart';
 
 class ApiService {
+  ApiService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+  String baseUrl = AppConfig.backendBaseUrl;
   String? token;
 
   Map<String, String> get _headers => {
@@ -19,25 +23,27 @@ class ApiService {
     String method = 'GET',
     Object? body,
   }) async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}$path');
-    late http.Response response;
+    final uri = Uri.parse('$baseUrl$path');
+    late Future<http.Response> pendingResponse;
 
     switch (method) {
       case 'POST':
-        response = await http.post(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse = _client.post(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'PUT':
-        response = await http.put(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse = _client.put(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'PATCH':
-        response = await http.patch(uri, headers: _headers, body: jsonEncode(body));
+        pendingResponse = _client.patch(uri, headers: _headers, body: jsonEncode(body));
         break;
       case 'DELETE':
-        response = await http.delete(uri, headers: _headers);
+        pendingResponse = _client.delete(uri, headers: _headers);
         break;
       default:
-        response = await http.get(uri, headers: _headers);
+        pendingResponse = _client.get(uri, headers: _headers);
     }
+
+    final response = await pendingResponse.timeout(const Duration(seconds: 10));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Request failed (${response.statusCode})';
@@ -114,8 +120,8 @@ class ApiService {
   Future<Map<String, dynamic>> me() => _jsonRequest('/auth/me');
 
   Future<List<Device>> getDevices() async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/devices');
-    final response = await http.get(uri, headers: _headers);
+    final uri = Uri.parse('$baseUrl/devices');
+    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load devices (${response.statusCode})');
     }
@@ -179,8 +185,8 @@ class ApiService {
   }
 
   Future<List<MusicTrack>> getMusic() async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/music');
-    final response = await http.get(uri, headers: _headers);
+    final uri = Uri.parse('$baseUrl/music');
+    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load music (${response.statusCode})');
     }
@@ -191,11 +197,11 @@ class ApiService {
   }
 
   Future<Uint8List> downloadMusic(int musicId) async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/music/$musicId/download');
+    final uri = Uri.parse('$baseUrl/music/$musicId/download');
     final headers = {
       if (token != null) 'Authorization': 'Bearer $token',
     };
-    final response = await http.get(uri, headers: headers);
+    final response = await _client.get(uri, headers: headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Music download failed (${response.statusCode})');
     }
@@ -204,9 +210,9 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>> getSchedules(int deviceId) async {
     final uri = Uri.parse(
-      '${AppConfig.backendBaseUrl}/schedules/device/$deviceId',
+      '$baseUrl/schedules/device/$deviceId',
     );
-    final response = await http.get(uri, headers: _headers);
+    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Could not load schedules (${response.statusCode})');
     }
@@ -238,8 +244,8 @@ class ApiService {
     await _jsonRequest('/schedules/$scheduleId', method: 'DELETE');
   }
   Future<List<LilyHome>> getHomes() async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/homes');
-    final response = await http.get(uri, headers: _headers);
+    final uri = Uri.parse('$baseUrl/homes');
+    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception(_messageFromResponse(response, 'Could not load homes'));
     }
@@ -248,8 +254,8 @@ class ApiService {
   }
 
   Future<List<LilyRoom>> getRooms(int homeId) async {
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/homes/$homeId/rooms');
-    final response = await http.get(uri, headers: _headers);
+    final uri = Uri.parse('$baseUrl/homes/$homeId/rooms');
+    final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception(_messageFromResponse(response, 'Could not load rooms'));
     }
