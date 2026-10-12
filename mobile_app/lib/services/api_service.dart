@@ -29,6 +29,21 @@ class ApiService {
     return result;
   }
 
+  String? get sessionIdentity {
+    try {
+      final encoded = token!.split('.')[1];
+      final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(encoded)))) as Map;
+      return (payload['sid'] ?? payload['sub'])?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> createWidgetSession(String installationId) =>
+      _jsonRequest('/widgets/session',
+          method: 'POST', body: {'installation_id': installationId});
+
   bool _validSession(Map<String, dynamic> data) =>
       [
         'access_token',

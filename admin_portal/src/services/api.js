@@ -65,6 +65,10 @@ export const api = {
       body: JSON.stringify({ active }),
     }),
 
+  deviceCredentials: (id) => request(`/admin/device-inventory/${id}/credentials`),
+  downloadDeviceConfig: (id) => request(`/admin/device-inventory/${id}/config`),
+  resyncDevice: (id) => request(`/admin/device-inventory/${id}/resync`, {method:'POST'}),
+  exportDevices: (fields) => request('/admin/devices/export.csv'+(fields ? '?fields='+encodeURIComponent(fields.join(',')) : '')),
   deviceModels: () => request('/admin/device-models'),
   generateDevice: (payload) => request('/admin/device-inventory', {method: 'POST', body: JSON.stringify(payload)}),
   devices: () => request("/devices/admin/all"),

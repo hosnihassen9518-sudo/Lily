@@ -184,6 +184,7 @@ void publishHeartbeat() {
 }
 
 void handleCommand(const JsonDocument& doc) {
+  if(deviceRuntimeReady() && String(doc["type"] | "")=="status_request"){publishState();publishHeartbeat();return;}
   if(!deviceRuntimeReady())return;
   String type = doc["type"] | "";
 

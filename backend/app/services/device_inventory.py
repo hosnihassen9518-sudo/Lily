@@ -11,7 +11,7 @@ from app.models.smart_device import DeviceProfile
 from app.models.device_lifecycle import DeviceIdentity
 from app.core.security import hash_password
 from app.core.config import settings
-from app.services.device_authorization import signing_key, public_pem, private_pem
+from app.services.device_authorization import prepare_signing_key, public_pem, private_pem
 
 def c_string(value: str) -> str:
     # Three-digit octal escapes preserve UTF-8 without invalid C surrogate escapes.
@@ -22,9 +22,9 @@ def create_inventory(db, type_id: int, model_key: str):
     dtype = db.get(DeviceType, type_id)
     if not model or not dtype or model.device_type_id != type_id:
         raise HTTPException(422, 'Select a supported model for this device type.')
-    server_key = signing_key()
+    server_key = prepare_signing_key(db)
     device_key = ec.generate_private_key(ec.SECP256R1())
-    secret = secrets.token_urlsafe(32)
+    secret = 'lily_' + secrets.token_urlsafe(32)
     for attempt in range(5):
         serial = 'LILY-' + secrets.token_hex(8).upper()
         try:
@@ -51,6 +51,8 @@ def create_inventory(db, type_id: int, model_key: str):
     pins = {'LED_PIN': 18} if dtype.key == 'test_light' else {'RGB_PIN': 4, 'I2S_BCLK_PIN': 12, 'I2S_LRC_PIN': 13, 'I2S_DOUT_PIN': 14, 'MIC_BCLK_PIN': 15, 'MIC_WS_PIN': 16, 'MIC_DATA_PIN': 17}
     values.update(pins)
     header = '#pragma once\n\n' + '\n'.join('#define ' + key + ' ' + (str(value) if isinstance(value, int) else c_string(value)) for key, value in values.items()) + '\n'
+    from app.services.provisioning_archive import archive_config
+    archive_config(db,device.id,{'serial_number':serial,'device_secret':secret,'filename':serial+'-device_config.h','config_header':header})
     db.commit()
     from app.api.devices import serialize_device
     return {'device': serialize_device(device, db), 'serial_number': serial, 'device_secret': secret,

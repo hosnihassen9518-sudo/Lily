@@ -35,9 +35,9 @@ def device_models(device_type_id: int | None = None, db: Session = Depends(get_d
     return [{'key': m.key, 'name': m.name, 'device_type_id': m.device_type_id, 'firmware_target': m.firmware_target} for m in db.scalars(query)]
 
 @router.get('/device-factory-public-key')
-def factory_public_key():
-    from app.services.device_authorization import signing_key, public_pem
-    return {'public_key':public_pem(signing_key().public_key())}
+def factory_public_key(db: Session = Depends(get_db)):
+    from app.services.device_authorization import prepare_signing_key, public_pem
+    return {'public_key':public_pem(prepare_signing_key(db).public_key())}
 
 @router.post('/device-inventory')
 def generated_inventory(payload: InventoryCreate, db: Session = Depends(get_db)):
@@ -131,3 +131,60 @@ def homes(db: Session = Depends(get_db)):
             "created_at": home.created_at,
         })
     return result
+
+@router.get('/device-inventory/{device_id}/credentials')
+def inventory_credentials(device_id:int,db:Session=Depends(get_db)):
+    from app.services.provisioning_archive import stored_config
+    from fastapi.responses import JSONResponse
+    data=stored_config(db,device_id)
+    return JSONResponse({'serial_number':data['serial_number'],'device_secret':data['device_secret']},headers={'Cache-Control':'no-store'})
+
+@router.get('/device-inventory/{device_id}/config')
+def inventory_config(device_id:int,db:Session=Depends(get_db)):
+    from app.services.provisioning_archive import stored_config
+    from fastapi.responses import Response
+    data=stored_config(db,device_id)
+    return Response(data['config_header'],media_type='text/plain',headers={'Content-Disposition':'attachment; filename="'+data['filename']+'"','Cache-Control':'no-store'})
+
+EXPORT_FIELDS=['id','serial_number','name','model','hardware_version','status','owner_id','device_type','home_id','room_id','firmware_version','online','last_seen','last_connected_at','last_disconnected_at','activated_at','created_at','wifi_rssi','free_heap','free_storage','light_enabled','brightness','color_r','color_g','color_b','audio_loaded','audio_playing','volume']
+@router.get('/devices/export.csv')
+def export_devices(fields:str|None=None,db:Session=Depends(get_db)):
+    import csv,io
+    from app.api.devices import serialize_device
+    from app.services.provisioning_archive import stored_config
+    from fastapi.responses import Response
+    columns=fields.split(',') if fields is not None else EXPORT_FIELDS
+    if not columns or len(columns)!=len(set(columns)) or any(c not in EXPORT_FIELDS+['device_secret'] for c in columns):raise HTTPException(422,'Select valid, distinct export fields.')
+    output=io.StringIO();writer=csv.writer(output);writer.writerow(columns)
+    for d in db.scalars(select(Device).order_by(Device.id)):
+        data=serialize_device(d,db)
+        row={c:getattr(d,c,None) for c in EXPORT_FIELDS}
+        row.update(status=data['status'],online=data['online'],device_type=data['smart_home']['device_type_name'],home_id=data['smart_home']['home_id'],room_id=data['smart_home']['room_id'],light_enabled=d.light_on)
+        if 'device_secret' in columns:
+            try:row['device_secret']=stored_config(db,d.id)['device_secret']
+            except HTTPException as error:
+                if error.status_code!=409:raise
+                row['device_secret']=''
+        values=[]
+        for c in columns:
+            value=row.get(c)
+            if isinstance(value,str) and value.lstrip().startswith(('=','+','-','@')):value="'"+value
+            values.append(value)
+        writer.writerow(values)
+    return Response(output.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="lily-devices.csv"','Cache-Control':'no-store'})
+
+@router.post('/device-inventory/{device_id}/resync')
+def resync_device(device_id:int,db:Session=Depends(get_db)):
+    from app.api.device_operations import locked_device,require_mutable,device_generation
+    from app.api.schedules import sync_device_schedule
+    from app.services.mqtt_service import mqtt_service
+    device=locked_device(db,device_id=device_id)
+    if not device:raise HTTPException(404,'Device not found')
+    require_mutable(device)
+    if not device.is_online:raise HTTPException(409,'Device is offline. Reconnect it before resyncing.')
+    if not sync_device_schedule(db,device):
+        raise HTTPException(503,'Broker unavailable. Schedules were not resent.')
+    sent=mqtt_service.publish_command(device.serial_number,{'type':'status_request'},generation=device_generation(db,device))
+    if not sent:raise HTTPException(503,'Broker unavailable. Resync was not sent.')
+    db.commit()
+    return {'ok':True,'detail':'State refresh requested and schedules resent. Credentials unchanged.'}

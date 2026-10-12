@@ -1,13 +1,18 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../models/music_track.dart';
 import '../models/home.dart';
 import '../services/api_service.dart';
+import '../services/widget_sync.dart';
 import '../models/backend_settings.dart';
 
 class AppState extends ChangeNotifier {
-  AppState({ApiService? api}) : api = api ?? ApiService() {
+  AppState({ApiService? api, WidgetPlatform? widgetPlatform})
+      : api = api ?? ApiService() {
+    widgets = WidgetSync(this.api, platform: widgetPlatform);
     this.api.onSessionInvalidated = () {
       _sessionRevision++;
       profile = null;
@@ -15,6 +20,9 @@ class AppState extends ChangeNotifier {
       music = [];
       homes = [];
       rooms = [];
+      offline = false;
+      unawaited(_clearCache());
+      unawaited(widgets.clear());
       notifyListeners();
     };
   }
@@ -26,6 +34,7 @@ class AppState extends ChangeNotifier {
   }
 
   final ApiService api;
+  late final WidgetSync widgets;
   int _sessionRevision = 0;
   BackendSettings get backendSettings => BackendSettings.fromUrl(api.baseUrl);
 
@@ -43,6 +52,86 @@ class AppState extends ChangeNotifier {
       error = null;
     }
     notifyListeners();
+  }
+
+  bool offline = false;
+  Future<void> _cacheTail = Future<void>.value();
+  Future<void> _clearCache() {
+    final next = _cacheTail.then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('session_cache');
+    });
+    _cacheTail = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _cacheSession() {
+    final rev = _sessionRevision,
+        url = api.baseUrl,
+        identity = api.sessionIdentity;
+    final snapshot = {
+      'server': url,
+      'session': identity,
+      'profile': profile,
+      'devices': devices.map((d) => d.toJson()).toList(),
+      'homes': homes
+          .map((h) => {'id': h.id, 'name': h.name, 'timezone': h.timezone})
+          .toList(),
+      'rooms': rooms
+          .map((r) =>
+              {'id': r.id, 'home_id': r.homeId, 'name': r.name, 'icon': r.icon})
+          .toList(),
+      'music': music
+          .map((m) => {
+                'id': m.id,
+                'title': m.title,
+                'description': m.description,
+                'filename': m.filename,
+                'filesize': m.filesize,
+                'checksum_sha256': m.checksum
+              })
+          .toList()
+    };
+    final next = _cacheTail.then((_) async {
+      if (rev != _sessionRevision || identity == null || !authenticated) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (rev != _sessionRevision || url != api.baseUrl) return;
+      await prefs.setString('session_cache', jsonEncode(snapshot));
+    });
+    _cacheTail = next.catchError((Object _) {});
+    return next;
+  }
+
+  void _restoreCache(String? saved) {
+    if (saved == null || api.sessionIdentity == null) return;
+    try {
+      final data = jsonDecode(saved) as Map;
+      if (data['server'] != api.baseUrl ||
+          data['session'] != api.sessionIdentity) return;
+      final restored = (data['devices'] as List)
+          .map((d) => Device.fromJson({
+                ...Map<String, dynamic>.from(d),
+                'online': false,
+                'status':
+                    d['status'] == 'RESET_PENDING' ? 'RESET_PENDING' : 'OFFLINE'
+              }))
+          .toList();
+      final restoredHomes = (data['homes'] as List)
+          .map((h) => LilyHome.fromJson(Map<String, dynamic>.from(h)))
+          .toList();
+      final restoredRooms = (data['rooms'] as List)
+          .map((h) => LilyRoom.fromJson(Map<String, dynamic>.from(h)))
+          .toList();
+      final restoredMusic = (data['music'] as List)
+          .map((h) => MusicTrack.fromJson(Map<String, dynamic>.from(h)))
+          .toList();
+      profile = (data['profile'] as Map?)?.cast<String, dynamic>();
+      devices = restored;
+      homes = restoredHomes;
+      rooms = restoredRooms;
+      music = restoredMusic;
+      offline = true;
+    } catch (_) {/* Corrupt cached data does not invalidate secure login. */}
   }
 
   bool initialized = false;
@@ -78,6 +167,7 @@ class AppState extends ChangeNotifier {
     }
 
     if (api.token != null) {
+      _restoreCache(prefs.getString('session_cache'));
       try {
         profile = await api.me();
         await refresh();
@@ -85,11 +175,13 @@ class AppState extends ChangeNotifier {
         if (e is ApiException && e.statusCode == 401) {
           await logout();
         } else {
+          offline = true;
           error = e.toString();
         }
       }
     }
 
+    if (!authenticated) await widgets.clear();
     initialized = true;
     notifyListeners();
   }
@@ -145,6 +237,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> logout() async {
     _sessionRevision++;
+    await widgets.clear();
     await api.logoutSession();
     api.token = null;
     profile = null;
@@ -152,6 +245,8 @@ class AppState extends ChangeNotifier {
     music = [];
     homes = [];
     rooms = [];
+    offline = false;
+    await _clearCache();
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     if (!await prefs.remove('access_token')) {
@@ -178,10 +273,27 @@ class AppState extends ChangeNotifier {
       music = loadedMusic;
       homes = loadedHomes;
       rooms = loadedRooms;
+      offline = false;
+      await _cacheSession();
+      await widgets.publish(devices);
+      if (revision != _sessionRevision) return;
       notifyListeners();
     } catch (e) {
       if (revision != _sessionRevision) return;
-      if (e is ApiException && e.statusCode == 401) await logout();
+      if (e is ApiException && e.statusCode == 401) {
+        await logout();
+      } else {
+        offline = true;
+        devices = devices
+            .map((d) => Device.fromJson({
+                  ...d.toJson(),
+                  'online': false,
+                  'status':
+                      d.status == 'RESET_PENDING' ? 'RESET_PENDING' : 'OFFLINE'
+                }))
+            .toList();
+        notifyListeners();
+      }
       rethrow;
     }
   }

@@ -64,6 +64,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        com.example.lily_mobile.widgets.LilyWidgetBridge.install(flutterEngine,this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "lily/platform")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

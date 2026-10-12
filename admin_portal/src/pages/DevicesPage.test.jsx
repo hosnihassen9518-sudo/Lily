@@ -27,3 +27,16 @@ describe('one-time factory credentials',()=>{
   expect(screen.queryByText('TEST-ONE-TIME')).not.toBeNull();
  });
 });
+
+it('shows saved credentials and lets administrators choose CSV fields',async()=>{
+ api.devices.mockResolvedValue([{id:7,serial_number:'SAVED-DEVICE',model:'Lily Test Light',status:'INVENTORY'}]);
+ api.deviceCredentials=vi.fn(async()=>({serial_number:'SAVED-DEVICE',device_secret:'saved-factory-secret'}));
+ api.exportDevices=vi.fn(async()=>({text:async()=>'serial_number\nSAVED-DEVICE\n'}));
+ URL.createObjectURL=vi.fn(()=> 'blob:test');URL.revokeObjectURL=vi.fn();
+ render(<DevicesPage/>);
+ await screen.findByText('SAVED-DEVICE');
+ fireEvent.click(screen.getByTitle('Show credentials'));
+ await screen.findByDisplayValue('saved-factory-secret');
+ fireEvent.click(screen.getByText('Export CSV'));
+ expect(screen.getByText('Choose fields')).not.toBeNull();
+});

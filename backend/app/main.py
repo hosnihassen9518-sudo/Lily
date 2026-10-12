@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.api import admin, auth, devices, music, schedules, smart_home
-from app.api import device_operations
+from app.api import device_operations, widgets
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import Base, SessionLocal, engine
@@ -92,6 +92,7 @@ app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(smart_home.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(device_operations.router, prefix='/api/v1')
+app.include_router(widgets.router,prefix='/api/v1')
 
 @app.get("/")
 def root():

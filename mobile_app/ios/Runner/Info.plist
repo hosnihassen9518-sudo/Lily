@@ -2,10 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Lily uses Bluetooth to securely configure your device's home Wi-Fi.</string>
-    <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>Lily uses Bluetooth to configure your device's home Wi-Fi.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -26,10 +22,40 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Lily</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>lily</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LilyWidgetAppGroup</key>
+	<string>group.com.example.lilyMobile</string>
+	<key>LilyWidgetKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)com.example.lilyMobile.widgets</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Lily uses Bluetooth to securely configure your device's home Wi-Fi.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Lily uses Bluetooth to configure your device's home Wi-Fi.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Lily uses your local network to connect to your server and devices.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

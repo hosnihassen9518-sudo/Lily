@@ -41,7 +41,7 @@ def sync_device_schedule(
         ],
     }
 
-    mqtt_service.publish_schedule(
+    return mqtt_service.publish_schedule(
         device.serial_number,
         payload,
         generation=device_generation(db,device),

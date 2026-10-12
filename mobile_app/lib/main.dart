@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'state/app_state.dart';
+import 'theme/lily_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,18 +29,7 @@ class LilyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Lily',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepPurple,
-        scaffoldBackgroundColor: const Color(0xFFF7F7FB),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-        ),
-      ),
+      theme: LilyTheme.light,
       home: state.authenticated ? const HomeScreen() : const AuthScreen(),
     );
   }

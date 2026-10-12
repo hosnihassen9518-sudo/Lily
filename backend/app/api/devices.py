@@ -47,6 +47,7 @@ def ensure_smart_profile(db: Session, device: Device, user_id: int):
     return profile
 
 def serialize_device(device: Device, db: Session | None = None):
+    from app.api.device_operations import device_generation
     if device.lifecycle_status == "RESET_PENDING":
         display_status = "RESET_PENDING"
     elif device.lifecycle_status == "DISABLED":
@@ -91,6 +92,7 @@ def serialize_device(device: Device, db: Session | None = None):
 
     return {
         "id": device.id,
+        "generation": device_generation(db, device) if db is not None else None,
         "serial_number": device.serial_number,
         "name": device.name,
         "model": device.model,
@@ -517,10 +519,11 @@ def admin_delete_device(
         raise HTTPException(409,"Finish the device reset before changing inventory state")
 
     from sqlalchemy import delete
+    from app.models.device_provisioning import DeviceProvisioning
     from app.models.device_lifecycle import DeviceIdentity, DeviceOperation
     from app.models.smart_device import DeviceTelemetry
     from app.models.schedule import Schedule
-    for model in (Schedule,DeviceProfile,DeviceState,DeviceTelemetry,DeviceIdentity,DeviceOperation):
+    for model in (DeviceProvisioning,Schedule,DeviceProfile,DeviceState,DeviceTelemetry,DeviceIdentity,DeviceOperation):
         db.execute(delete(model).where(model.device_id==device.id))
     db.delete(device)
     db.commit()

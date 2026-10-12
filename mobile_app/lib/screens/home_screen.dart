@@ -6,8 +6,10 @@ import '../models/device.dart';
 import '../state/app_state.dart';
 import '../widgets/device_card.dart';
 import '../widgets/backend_settings_button.dart';
+import '../widgets/lily_logo.dart';
 import 'home_management_screen.dart';
 import 'music_screen.dart';
+import 'widget_settings_screen.dart';
 import 'pair_device_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     timer = Timer.periodic(
       const Duration(seconds: 15),
-      (_) => context.read<AppState>().refresh(),
+      (_) => context.read<AppState>().refresh().catchError((Object _) {}),
     );
   }
 
@@ -38,35 +40,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _deviceGrid(BuildContext context, List<Device> devices) {
     if (devices.isEmpty) return const SizedBox.shrink();
-    if (!kIsWeb) {
-      return Column(
-        children: devices
-            .map((d) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: DeviceCard(device: d),
-                ))
-            .toList(),
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final columns = width > 1150
-            ? 3
-            : width > 720
-                ? 2
-                : 1;
-        return GridView.count(
-          crossAxisCount: columns,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.75,
-          children: devices.map((d) => DeviceCard(device: d)).toList(),
-        );
-      },
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final cardWidth = (constraints.maxWidth - 12) / 2;
+      return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: devices
+              .map((d) =>
+                  SizedBox(width: cardWidth, child: DeviceCard(device: d)))
+              .toList());
+    });
   }
 
   Widget _roomSection(
@@ -81,11 +64,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const Icon(Icons.meeting_room_outlined, size: 20),
               const SizedBox(width: 7),
-              Text(title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800)),
+              Expanded(
+                  child: Text(title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800))),
               const SizedBox(width: 8),
               Text('${devices.length}',
                   style: TextStyle(color: Colors.grey.shade600)),
@@ -104,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return RefreshIndicator(
         onRefresh: state.refresh,
         child: ListView(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(16),
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
             _header(context),
             const SizedBox(height: 22),
@@ -164,47 +149,59 @@ class _HomeScreenState extends State<HomeScreen> {
     return RefreshIndicator(
       onRefresh: state.refresh,
       child: ListView(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
         children: [_header(context), const SizedBox(height: 22), ...sections],
       ),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('My devices',
+  Widget _header(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFFE6DDF8), Color(0xFFDCEFFC)]),
+                borderRadius: BorderRadius.circular(24)),
+            child: Row(children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('A little everyday magic',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    const Text('Lights, music, and cozy moments with Lily.')
+                  ])),
+              const SizedBox(width: 12),
+              ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset('assets/branding/lily_cloud.png',
+                      width: 76, height: 76, fit: BoxFit.cover))
+            ])),
+        if (context.watch<AppState>().offline) ...[
+          const SizedBox(height: 12),
+          const Text('Showing saved configuration. Pull down to reconnect.')
+        ],
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(
+              child: Text('My devices',
                   style: Theme.of(context)
                       .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text('Devices are grouped by home and room.',
-                  style: TextStyle(color: Colors.grey.shade600)),
-            ],
-          ),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const HomeManagementScreen())),
-          icon: const Icon(Icons.home_work_outlined),
-          label: const Text('Homes & rooms'),
-        ),
-        if (!kIsWeb) ...[
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: _addDevice,
-            icon: const Icon(Icons.add),
-            label: const Text('Add'),
-          ),
-        ],
-      ],
-    );
-  }
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800))),
+          if (!kIsWeb)
+            FilledButton.icon(
+                onPressed: _addDevice,
+                icon: const Icon(Icons.add),
+                label: const Text('Add'))
+        ]),
+      ]);
 
   Future<void> _addDevice() async {
     final added = await Navigator.of(context).push<bool>(
@@ -226,6 +223,12 @@ class _HomeScreenState extends State<HomeScreen> {
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 14),
         OutlinedButton.icon(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const WidgetSettingsScreen())),
+            icon: const Icon(Icons.widgets_outlined),
+            label: const Text('Home-screen widgets')),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
             onPressed: state.logout,
             icon: const Icon(Icons.logout),
             label: const Text('Sign out')),
@@ -244,9 +247,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (kIsWeb) {
       return Scaffold(
-        appBar: AppBar(
-            title: const Text('Lily'),
-            actions: const [BackendSettingsButton()]),
+        appBar: AppBar(title: const LilyLogo(), actions: [
+          IconButton(
+              tooltip: 'Home-screen widgets',
+              icon: const Icon(Icons.widgets_outlined),
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const WidgetSettingsScreen()))),
+          IconButton(
+              tooltip: 'Home configuration',
+              icon: const Icon(Icons.home_work_outlined),
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const HomeManagementScreen()))),
+          const BackendSettingsButton()
+        ]),
         body: Row(
           children: [
             NavigationRail(
@@ -286,10 +303,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-          title: const Text('Lily'), actions: const [BackendSettingsButton()]),
+      appBar: AppBar(title: const LilyLogo(), actions: [
+        IconButton(
+            tooltip: 'Home configuration',
+            icon: const Icon(Icons.home_work_outlined),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const HomeManagementScreen()))),
+        const BackendSettingsButton()
+      ]),
       body: pages[index],
       bottomNavigationBar: NavigationBar(
+        height: 80 + (MediaQuery.textScalerOf(context).scale(14) - 14) * 3,
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
         destinations: const [

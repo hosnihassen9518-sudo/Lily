@@ -76,90 +76,67 @@ class _DeviceCardState extends State<DeviceCard> {
   @override
   Widget build(BuildContext context) {
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: () => _open(context),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: device.online
-                        ? Colors.green.withValues(alpha: .12)
-                        : Colors.grey.withValues(alpha: .12),
-                    child: Icon(
-                      device.supportsAudio ? Icons.speaker : Icons.lightbulb,
-                      color: device.online ? Colors.green : Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
+              SizedBox(
+                  height: 110,
+                  child: Image.asset('assets/branding/lily_cloud.png',
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Smiling cloud nightlight')),
+              Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(device.displayName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontWeight: FontWeight.w800, fontSize: 16)),
-                        const SizedBox(height: 4),
-                        Text(device.deviceTypeName ?? device.model,
-                            style: TextStyle(
-                                color: Colors.grey.shade600, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  DeviceStatusBadge(status: device.status),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: device.online && !sendingPower
-                        ? () => _switchPower(context)
-                        : null,
-                    icon: const Icon(Icons.power_settings_new),
-                    label: Text(sendingPower
-                        ? 'Sending...'
-                        : device.supportsLight
-                            ? (device.lightEnabled ? 'Turn off' : 'Turn on')
-                            : 'Off'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: device.online &&
-                            device.supportsAudio &&
-                            device.audioLoaded
-                        ? () => _play(context)
-                        : null,
-                    icon: Icon(
-                        device.audioPlaying ? Icons.stop : Icons.play_arrow),
-                    label: Text(device.audioPlaying ? 'Stop' : 'Play'),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _open(context),
-                    icon: const Icon(Icons.tune),
-                    label: const Text('More'),
-                  ),
-                ],
-              ),
-              if (device.audioPlaying) ...[
-                const SizedBox(height: 10),
-                const Row(
-                  children: [
-                    Icon(Icons.graphic_eq, size: 18),
-                    SizedBox(width: 6),
-                    Text('Music playing',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
+                        const SizedBox(height: 6),
+                        DeviceStatusBadge(status: device.status),
+                        const SizedBox(height: 10),
+                        if (device.supportsLight ||
+                            device.hasCapability('power'))
+                          SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.tonal(
+                                  onPressed: device.online && !sendingPower
+                                      ? () => _switchPower(context)
+                                      : null,
+                                  child: Text(
+                                      sendingPower
+                                          ? 'Sending...'
+                                          : !device.supportsLight ||
+                                                  device.lightEnabled
+                                              ? 'Turn off'
+                                              : 'Turn on',
+                                      textAlign: TextAlign.center))),
+                        if (device.supportsAudio)
+                          SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                  onPressed: device.online && device.audioLoaded
+                                      ? () => _play(context)
+                                      : null,
+                                  child: Text(
+                                      device.audioPlaying ? 'Stop' : 'Play'))),
+                        SizedBox(
+                            width: double.infinity,
+                            child: TextButton.icon(
+                                onPressed: () => _open(context),
+                                icon: const Icon(Icons.tune, size: 18),
+                                label: const Text('More'))),
+                        if (device.audioPlaying)
+                          const Text('Music playing',
+                              style: TextStyle(fontSize: 12)),
+                      ])),
+            ]),
       ),
     );
   }

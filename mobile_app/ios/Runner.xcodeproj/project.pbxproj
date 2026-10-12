@@ -16,6 +16,13 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		F38D8A125BD91E449541486B /* LilyWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A9C4B710944A4FB5CC9993; };
+		FFDB1582494C43883669DFCE /* WidgetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9620BA9D57484FB526CF278; };
+		736561CD2039E12884BFB674 /* WidgetStore.swift */ = {isa = PBXBuildFile; fileRef = D9620BA9D57484FB526CF278; };
+		5E828AF83537900F23C0E51D /* WidgetAPI.swift */ = {isa = PBXBuildFile; fileRef = FD440D37C523B935F39399EF; };
+		2E3A7D951E279CA4EB356836 /* LilyWidget.swift */ = {isa = PBXBuildFile; fileRef = 521C34FF0D6F3F2CE5D45479; };
+		96A22C3821F2D8104703A159 /* Assets.xcassets */ = {isa = PBXBuildFile; fileRef = 0AC30E479842DFEEE0512E10; };
+		63D876C2EFE6A621D9B2392B /* LilyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9C67765608AB505F314FE969; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +33,7 @@
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
 		};
+		C460E4F8ABAE5C79784C4180 = {isa = PBXContainerItemProxy; containerPortal = 97C146E61CF9000F007C117D; proxyType = 1; remoteGlobalIDString = 72A28D288030AEFA30D2B8A8; remoteInfo = LilyWidget; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,6 +47,7 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		153142D15A6D98D35FE2D41D /* Embed App Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (63D876C2EFE6A621D9B2392B, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +68,14 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		56A9C4B710944A4FB5CC9993 /* LilyWidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LilyWidgetBridge.swift; sourceTree = "<group>"; };
+		D9620BA9D57484FB526CF278 /* WidgetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetStore.swift; sourceTree = "<group>"; };
+		FD440D37C523B935F39399EF /* WidgetAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
+		521C34FF0D6F3F2CE5D45479 /* LilyWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LilyWidget.swift; sourceTree = "<group>"; };
+		0AC30E479842DFEEE0512E10 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		042DE7C4F1D7974C9F6F20CF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		606C52DD01B44DC747E263A8 /* LilyWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LilyWidget.entitlements; sourceTree = "<group>"; };
+		9C67765608AB505F314FE969 /* LilyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LilyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +87,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		42D2D2208A652C970636D292 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -96,6 +114,8 @@
 		97C146E51CF9000F007C117D = {
 			isa = PBXGroup;
 			children = (
+				25E9B861692482655FA0AC01 /* LilyWidget */,
+				35543AB72D7EF3AE02A96A5A /* WidgetShared */,
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
@@ -106,6 +126,7 @@
 		97C146EF1CF9000F007C117D /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				9C67765608AB505F314FE969 /* LilyWidget.appex */,
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 			);
@@ -115,6 +136,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				56A9C4B710944A4FB5CC9993 /* LilyWidgetBridge.swift */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -128,6 +150,8 @@
 			path = Runner;
 			sourceTree = "<group>";
 		};
+		35543AB72D7EF3AE02A96A5A /* WidgetShared */ = {isa = PBXGroup; children = (D9620BA9D57484FB526CF278, FD440D37C523B935F39399EF, ); path = WidgetShared; sourceTree = "<group>"; };
+		25E9B861692482655FA0AC01 /* LilyWidget */ = {isa = PBXGroup; children = (521C34FF0D6F3F2CE5D45479,0AC30E479842DFEEE0512E10,042DE7C4F1D7974C9F6F20CF,606C52DD01B44DC747E263A8, ); path = LilyWidget; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -152,6 +176,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
+				153142D15A6D98D35FE2D41D /* Embed App Extensions */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
@@ -162,6 +187,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				0F6582B8D23143D0CECE6013 /* LilyWidget */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -171,6 +197,11 @@
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
 		};
+		72A28D288030AEFA30D2B8A8 /* LilyWidget */ = {
+ isa = PBXNativeTarget; buildConfigurationList = EBA878BF413ADCAB6B8D1E6E;
+ buildPhases = (37EAF25CFA378780CB66B5B3, 42D2D2208A652C970636D292, 571D7CFEF6B37104FE43530F, ); buildRules = (); dependencies = ();
+ name = LilyWidget; productName = LilyWidget; productReference = 9C67765608AB505F314FE969; productType = "com.apple.product-type.app-extension";
+};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -207,6 +238,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				72A28D288030AEFA30D2B8A8 /* LilyWidget */,
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 			);
@@ -232,6 +264,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		571D7CFEF6B37104FE43530F = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (96A22C3821F2D8104703A159, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -281,12 +314,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FFDB1582494C43883669DFCE,
+				F38D8A125BD91E449541486B,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		37EAF25CFA378780CB66B5B3 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (736561CD2039E12884BFB674, 5E828AF83537900F23C0E51D, 2E3A7D951E279CA4EB356836, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -295,6 +331,7 @@
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
 		};
+		0F6582B8D23143D0CECE6013 = {isa = PBXTargetDependency; target = 72A28D288030AEFA30D2B8A8; targetProxy = C460E4F8ABAE5C79784C4180; };
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -383,6 +420,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -562,6 +600,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -584,6 +623,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -591,6 +631,30 @@
 			};
 			name = Release;
 		};
+		E5656BE3CAB4C1CAE933D78E /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+ APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+ LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+ MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
+ }; name = Debug; };
+		0BE185FA6CC2B83BCD6E5BEF /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+ APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+ LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+ MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
+ }; name = Release; };
+		4937C975046794BF9B891649 /* Profile */ = {isa = XCBuildConfiguration; buildSettings = {
+ APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+ LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+ MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
+ }; name = Profile; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -624,6 +688,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		EBA878BF413ADCAB6B8D1E6E = {isa = XCConfigurationList; buildConfigurations = (E5656BE3CAB4C1CAE933D78E, 0BE185FA6CC2B83BCD6E5BEF, 4937C975046794BF9B891649, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */

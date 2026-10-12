@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     secret_key: str = "change-me"
-    device_signing_key_file: str | None = None
+    device_signing_key_file: str | None = "./data/device-signing.pem"
     factory_backend_host: str = '192.168.1.100'
     factory_backend_port: int = 6100
     factory_mqtt_host: str = '192.168.1.100'

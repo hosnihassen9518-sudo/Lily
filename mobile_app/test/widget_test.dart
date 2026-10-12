@@ -14,6 +14,19 @@ import 'package:lily_mobile/screens/music_screen.dart';
 import 'package:lily_mobile/services/api_service.dart';
 
 void main() {
+  testWidgets('Native account exposes widget setup', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state=AppState();
+    await tester.pumpWidget(ChangeNotifierProvider.value(value:state,child:const MaterialApp(home:HomeScreen())));
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Home-screen widgets'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enable / refresh widgets'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    state.dispose();
+  });
+
   testWidgets('Login settings validates and saves the server', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = AppState();
