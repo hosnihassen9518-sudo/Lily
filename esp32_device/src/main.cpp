@@ -10,6 +10,10 @@
 #include <mbedtls/sha256.h>
 
 #include "device_config.h"
+#include "device_lifecycle.h"
+#include "device_message_rules.h"
+#include "wifi_transaction.h"
+#include "ble_provisioning.h"
 #include "storage_paths.h"
 
 WebServer webServer(80);
@@ -49,15 +53,18 @@ void applyLight() {
   pixel.show();
 }
 
-void saveConfig() {
+bool saveConfig() {
   JsonDocument doc;
   doc["ssid"] = homeSsid;
   doc["password"] = homePassword;
 
-  File file = LittleFS.open(CONFIG_PATH, "w");
-  if (!file) return;
-  serializeJson(doc, file);
-  file.close();
+  File file = LittleFS.open("/config.tmp", "w");
+  if (!file) return false;
+  const size_t expected=measureJson(doc);
+  const size_t written=serializeJson(doc,file);
+  file.flush();const bool complete=written==expected && file.size()==expected;file.close();
+  if(!complete || !LittleFS.rename("/config.tmp",CONFIG_PATH)){LittleFS.remove("/config.tmp");return false;}
+  return true;
 }
 
 bool loadConfig() {
@@ -129,9 +136,10 @@ bool activateWithBackend() {
 
   int code = http.POST(body);
   String response = http.getString();
+  if(code>=200 && code<300){JsonDocument result;deserializeJson(result,response);setDeviceGeneration(result["generation"]|0);}
   http.end();
 
-  Serial.printf("Activation HTTP %d: %s\n", code, response.c_str());
+  Serial.printf("Activation HTTP %d\n", code);
   return code >= 200 && code < 300;
 }
 
@@ -139,6 +147,7 @@ void publishState() {
   if (!mqtt.connected()) return;
 
   JsonDocument doc;
+  if(deviceManagementSupported())doc["generation"]=deviceGeneration();
   JsonObject light = doc["light"].to<JsonObject>();
   light["enabled"] = lightEnabled;
   light["brightness"] = lightBrightness;
@@ -160,6 +169,7 @@ void publishHeartbeat() {
   if (!mqtt.connected()) return;
 
   JsonDocument doc;
+  if(deviceManagementSupported())doc["generation"]=deviceGeneration();
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["free_heap"] = ESP.getFreeHeap();
   doc["free_storage"] =
@@ -174,6 +184,7 @@ void publishHeartbeat() {
 }
 
 void handleCommand(const JsonDocument& doc) {
+  if(!deviceRuntimeReady())return;
   String type = doc["type"] | "";
 
   if (type == "light") {
@@ -209,13 +220,15 @@ void mqttCallback(char* rawTopic, byte* payload, unsigned int length) {
 
   if (String(rawTopic) == topic("command")) {
     JsonDocument doc;
-    if (!deserializeJson(doc, incoming)) {
+    if (!deserializeJson(doc, incoming) && acceptDeviceMessage(deviceRuntimeReady(),deviceManagementSupported(),deviceGeneration(),doc["generation"].is<int>() ? doc["generation"].as<int>() : -1)) {
       handleCommand(doc);
     }
     return;
   }
 
   if (String(rawTopic) == topic("schedule")) {
+    JsonDocument doc;
+    if(deserializeJson(doc,incoming) || !acceptDeviceMessage(deviceRuntimeReady(),deviceManagementSupported(),deviceGeneration(),doc["generation"].is<int>() ? doc["generation"].as<int>() : -1))return;
     File file = LittleFS.open(SCHEDULES_PATH, "w");
     if (file) {
       file.print(incoming);
@@ -225,30 +238,37 @@ void mqttCallback(char* rawTopic, byte* payload, unsigned int length) {
 }
 
 bool connectMqtt() {
+  if(!deviceRuntimeReady())return false;
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(4096);
 
   const String clientId = "lily-" + String(DEVICE_SERIAL);
   const String statusTopic = topic("status");
+  JsonDocument status;status["status"]="offline";
+  if(deviceManagementSupported())status["generation"]=deviceGeneration();
+  String offline;serializeJson(status,offline);
+  status["status"]="online";String online;serializeJson(status,online);
 
   bool ok = mqtt.connect(
       clientId.c_str(),
       statusTopic.c_str(),
       1,
       true,
-      "{\"status\":\"offline\"}");
+      offline.c_str());
 
   if (!ok) return false;
 
   mqtt.subscribe(topic("command").c_str(), 1);
   mqtt.subscribe(topic("schedule").c_str(), 1);
-  mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}", true);
+  mqtt.publish(statusTopic.c_str(), online.c_str(), true);
 
   publishState();
   publishHeartbeat();
   return true;
 }
+
+bool provisionWifi(const BleWifiRequest& request,String& detail,bool keepAp);
 
 void beginProvisioningAccessPoint() {
   WiFi.mode(WIFI_AP_STA);
@@ -304,6 +324,7 @@ void beginProvisioningAccessPoint() {
   });
 
   webServer.on("/provision", HTTP_POST, []() {
+    if(deviceResetPending()){webServer.send(409,"application/json","{\"detail\":\"Reset pending\"}");return;}
     if (!webServer.hasArg("plain")) {
       webServer.send(400, "application/json", "{\"detail\":\"Missing body\"}");
       return;
@@ -316,6 +337,10 @@ void beginProvisioningAccessPoint() {
       return;
     }
 
+    if(!homeSsid.isEmpty()) {
+      String envelope;serializeJson(doc["authorization"],envelope);
+      if(!validateWifiAuthorization(envelope,doc["challenge"]|"")){webServer.send(403,"application/json","{\"detail\":\"Use authenticated Bluetooth Wi-Fi management\"}");return;}
+    }
     String requestedSsid = String((const char*)doc["ssid"]);
     String requestedPassword = String((const char*)doc["password"]);
     String requestedPairingToken = String((const char*)doc["pairing_token"]);
@@ -325,38 +350,13 @@ void beginProvisioningAccessPoint() {
       return;
     }
 
-    WiFi.disconnect(false, false);
-    delay(200);
-    WiFi.begin(requestedSsid.c_str(), requestedPassword.c_str());
-
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
-      delay(250);
+    BleWifiRequest request;
+    request.ssid=requestedSsid;request.password=requestedPassword;request.token=requestedPairingToken;
+    request.command=homeSsid.isEmpty() ? "provision" : "update_wifi";
+    String detail;
+    if(!provisionWifi(request,detail,true)) {
+      webServer.send(422,"application/json","{\"detail\":\"Wi-Fi could not be connected, authorized, or saved. Previous settings were kept.\"}");return;
     }
-
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.disconnect(false, false);
-      webServer.send(422, "application/json",
-          "{\"detail\":\"Could not connect to the selected Wi-Fi. Check the password and try again. The Lily setup network is still available.\"}");
-      return;
-    }
-
-    homeSsid = requestedSsid;
-    homePassword = requestedPassword;
-    pairingToken = requestedPairingToken;
-
-    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-    tzset();
-    configTime(0, 0, "pool.ntp.org", "time.google.com");
-
-    if (!activateWithBackend()) {
-      webServer.send(502, "application/json",
-          "{\"detail\":\"Wi-Fi connected, but Lily could not register with the server. Check backend connectivity and retry.\"}");
-      return;
-    }
-
-    saveConfig();
-    if (!mqtt.connected()) connectMqtt();
 
     webServer.send(200, "application/json",
         "{\"ok\":true,\"detail\":\"Device connected and registered successfully.\"}");
@@ -366,6 +366,7 @@ void beginProvisioningAccessPoint() {
       "/audio",
       HTTP_POST,
       []() {
+        if(!allowsUserFileMutation(deviceResetPending())) {webServer.send(409,"application/json","{\"detail\":\"Reset pending\"}");return;}
         const String expectedHash = webServer.arg("sha256");
 
         if (!LittleFS.exists(AUDIO_UPLOAD_PATH)) {
@@ -402,6 +403,7 @@ void beginProvisioningAccessPoint() {
         webServer.send(200, "application/json", "{\"ok\":true}");
       },
       []() {
+        if(!allowsUserFileMutation(deviceResetPending()))return;
         HTTPUpload& upload = webServer.upload();
 
         if (upload.status == UPLOAD_FILE_START) {
@@ -569,6 +571,36 @@ void executeSchedulesIfDue() {
   }
 }
 
+void initializeScheduleClock() {
+  setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1);tzset();
+  configTime(0,0,"pool.ntp.org","time.google.com");
+}
+
+bool provisionWifi(const BleWifiRequest& request,String& detail,bool keepAp) {
+  const String previousSsid=homeSsid,previousPassword=homePassword;
+  auto connect=[&](){
+    mqtt.disconnect();WiFi.mode(keepAp ? WIFI_AP_STA : WIFI_STA);WiFi.persistent(false);WiFi.disconnect(false,false);
+    bleProvisionStatus(request.requestId,"connecting_wifi");
+    WiFi.begin(request.ssid.c_str(),request.password.c_str());
+    const auto start=millis();while(WiFi.status()!=WL_CONNECTED && millis()-start<20000)delay(100);
+    return WiFi.status()==WL_CONNECTED;
+  };
+  auto authorize=[&](){
+    bleProvisionStatus(request.requestId,"activating");pairingToken=request.token;
+    const bool ok=request.command=="update_wifi" ? confirmWifiConnection() : activateWithBackend();pairingToken="";return ok;
+  };
+  auto persist=[&](){homeSsid=request.ssid;homePassword=request.password;return saveConfig();};
+  auto restore=[&](){
+    homeSsid=previousSsid;homePassword=previousPassword;pairingToken="";WiFi.disconnect(false,false);
+    if(!homeSsid.isEmpty())WiFi.begin(homeSsid.c_str(),homePassword.c_str());else if(!keepAp)WiFi.mode(WIFI_OFF);
+  };
+  const bool ok=applyWifiConfiguration(connect,authorize,persist,restore,initializeScheduleClock);
+  if(!ok)detail="Wi-Fi could not be connected, authorized, or saved. Previous settings were kept.";
+  return ok;
+}
+
+bool provisionOverBle(const BleWifiRequest& request,String& detail) { return provisionWifi(request,detail,false); }
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -578,16 +610,24 @@ void setup() {
   pixel.show();
 
   if (!LittleFS.begin(true)) {
-    Serial.println("LittleFS mount failed");
+    Serial.println("LittleFS mount failed; setup stopped to preserve reset state.");
+    while(true)delay(1000);
   }
 
   audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
   audio.setVolume(map(audioVolume, 0, 100, 0, 21));
 
-  loadConfig();
+  beginDeviceLifecycle([](){
+    audio.stopSong();lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
+    const char* files[]={CONFIG_PATH,"/config.tmp",SCHEDULES_PATH,AUDIO_CURRENT_PATH,AUDIO_UPLOAD_PATH};
+    for(auto path:files)if(LittleFS.exists(path) && !LittleFS.remove(path))return false;
+    return true;
+  });
+  if(!deviceResetPending())loadConfig();
 
-  beginProvisioningAccessPoint();
+  if(!deviceResetPending())beginProvisioningAccessPoint();
   connectStoredWifi();
+  beginBleProvisioning(!homeSsid.isEmpty(),provisionOverBle);
 
   if (WiFi.status() == WL_CONNECTED) {
     connectMqtt();
@@ -595,7 +635,9 @@ void setup() {
 }
 
 void loop() {
-  webServer.handleClient();
+  pollDeviceLifecycle();
+  pollBleProvisioning();
+  if(allowsUserFileMutation(deviceResetPending()))webServer.handleClient();
   audio.loop();
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -604,7 +646,7 @@ void loop() {
       connectMqtt();
     }
 
-    mqtt.loop();
+    if(deviceRuntimeReady())mqtt.loop();
 
     if (millis() - lastHeartbeat > 30000) {
       lastHeartbeat = millis();
@@ -613,7 +655,7 @@ void loop() {
 
     if (millis() - lastScheduleCheck > 1000) {
       lastScheduleCheck = millis();
-      executeSchedulesIfDue();
+      if(deviceRuntimeReady())executeSchedulesIfDue();
     }
   }
 }

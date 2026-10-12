@@ -76,3 +76,7 @@ iOS requires the Hotspot Configuration capability for programmatic Wi-Fi joining
 ## Important web limitation
 
 Browsers generally cannot programmatically join an ESP32 Wi-Fi network. The same Flutter app can run on Web for account/device control, but initial Wi-Fi provisioning is intended for Android/iOS.
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).

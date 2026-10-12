@@ -1,4 +1,5 @@
 from app.models.user import User
+from app.models.device_lifecycle import DeviceModel, AppSetting, MobileSession, DeviceIdentity, DeviceOperation
 from app.models.device import Device
 from app.models.music import Music
 from app.models.schedule import Schedule

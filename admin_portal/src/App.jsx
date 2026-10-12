@@ -9,6 +9,7 @@ import MusicPage from "./pages/MusicPage";
 import HomesPage from "./pages/HomesPage";
 import DeviceTypesPage from "./pages/DeviceTypesPage";
 import Layout from "./components/Layout";
+import SettingsPage from './pages/SettingsPage';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="device-types" element={<DeviceTypesPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="music" element={<MusicPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

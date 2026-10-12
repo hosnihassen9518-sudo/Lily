@@ -147,3 +147,7 @@ Treat backups as private because they contain accounts and device secrets.
 
 Compose startup behavior: https://docs.docker.com/compose/how-tos/startup-order/.
 Mosquitto image configuration: https://github.com/eclipse-mosquitto/mosquitto/blob/master/docker/generic/README.md.
+
+## 0.8.0 upgrade
+
+See [device lifecycle setup](device-lifecycle-and-session-policy.md) for the database migration, persistent signing key, factory addresses, and firmware/app upgrade requirements. Preserve the backend data volume and signing key across container rebuilds.

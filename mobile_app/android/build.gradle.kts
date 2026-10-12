@@ -19,9 +19,9 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// file_picker 8.x hardcodes API 34, while android_lifecycle requires API 36.
+// These plugin releases hardcode SDK levels; compile them against the supported SDK 36.
 subprojects {
-    if (name == "file_picker") {
+    if (name == "file_picker" || name == "reactive_ble_mobile") {
         afterEvaluate {
             extensions.configure<com.android.build.gradle.LibraryExtension> {
                 compileSdk = 36

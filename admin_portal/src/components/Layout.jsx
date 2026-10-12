@@ -10,6 +10,7 @@ import {
   X,
   House,
   Shapes,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -20,6 +21,7 @@ const items = [
   { to: "/device-types", label: "Device Types", icon: Shapes },
   { to: "/users", label: "Users", icon: Users },
   { to: "/music", label: "Music", icon: Music2 },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Layout() {

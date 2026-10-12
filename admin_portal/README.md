@@ -64,3 +64,7 @@ Unless changed in `backend/.env`:
 admin@example.com
 ChangeThisAdminPassword!
 ```
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).

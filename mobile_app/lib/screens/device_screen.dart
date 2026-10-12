@@ -5,6 +5,7 @@ import '../models/device.dart';
 import '../state/app_state.dart';
 import '../widgets/device_status_badge.dart';
 import 'schedules_screen.dart';
+import 'device_management_screen.dart';
 
 class DeviceScreen extends StatefulWidget {
   final int deviceId;
@@ -113,6 +114,10 @@ class _DeviceScreenState extends State<DeviceScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          if(!kIsWeb) ...[
+            OutlinedButton.icon(onPressed:d.status=='RESET_PENDING'?null:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>DeviceManagementScreen(device:d,wifi:true))),icon:const Icon(Icons.wifi),label:const Text('Change Wi-Fi')),
+            OutlinedButton.icon(onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>DeviceManagementScreen(device:d,wifi:false))),icon:const Icon(Icons.delete_outline),label:Text(d.status=='RESET_PENDING'?'Finish device reset':'Remove device')),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),

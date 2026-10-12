@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.api import admin, auth, devices, music, schedules, smart_home
+from app.api import device_operations
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import Base, SessionLocal, engine
@@ -16,7 +17,8 @@ from app.services.mqtt_service import mqtt_service
 
 def bootstrap():
     Path(settings.music_dir).mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
+    from app.db.migrations import upgrade_database
+    upgrade_database(engine)
 
     with SessionLocal() as db:
         admin_user = db.scalar(select(User).where(User.email == settings.admin_email.lower()))
@@ -52,6 +54,8 @@ def bootstrap():
                 if capability not in existing:
                     db.add(DeviceTypeCapability(device_type_id=dtype.id, capability=capability))
         db.commit()
+        from app.services.device_inventory import seed_models
+        seed_models(db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,7 +66,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.6.1",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -87,12 +91,13 @@ app.include_router(music.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(smart_home.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(device_operations.router, prefix='/api/v1')
 
 @app.get("/")
 def root():
     return {
         "name": settings.app_name,
-        "version": "0.6.1",
+        "version": "0.8.0",
         "docs": "/docs",
     }
 

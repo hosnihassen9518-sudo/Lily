@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math';
+import 'session_store.dart';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../config.dart';
@@ -7,11 +9,188 @@ import '../models/music_track.dart';
 import '../models/home.dart';
 
 class ApiService {
-  ApiService({http.Client? client}) : _client = client ?? http.Client();
+  ApiService({http.Client? client, SessionStore? sessionStore})
+      : _client = client ?? http.Client(),
+        sessionStore = sessionStore ?? SecureSessionStore();
 
   final http.Client _client;
   String baseUrl = AppConfig.backendBaseUrl;
   String? token;
+  void Function()? onSessionInvalidated;
+  final SessionStore sessionStore;
+  Map<String, dynamic>? _session;
+  Future<void>? _refreshing;
+  int _revision = 0;
+  Future<void> _storageTail = Future<void>.value();
+  Future<T> _storage<T>(Future<T> Function() action) {
+    final result = _storageTail.then((_) => action());
+    _storageTail =
+        result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  bool _validSession(Map<String, dynamic> data) =>
+      [
+        'access_token',
+        'refresh_token',
+        'session_expires_at',
+        'access_expires_at'
+      ].every(
+          (key) => data[key] is String && (data[key] as String).isNotEmpty) &&
+      DateTime.tryParse(data['session_expires_at'] as String) != null &&
+      DateTime.tryParse(data['access_expires_at'] as String) != null;
+  void _checkRevision(int revision, String url) {
+    if (revision != _revision || url != baseUrl)
+      throw StateError('Session changed.');
+  }
+
+  Future<void> restoreSession() async {
+    final rev = _revision, url = baseUrl;
+    final stored = await _storage(() => sessionStore.read(url));
+    _checkRevision(rev, url);
+    if (stored != null && !_validSession(stored)) {
+      await clearSession();
+      throw ApiException(401, 'Saved login is invalid. Sign in again.');
+    }
+    _session = stored;
+    token = _session?['access_token'] as String? ?? token;
+    if (_session != null && _expired('session_expires_at')) {
+      await clearSession();
+      throw ApiException(401, 'Your session expired. Sign in again.');
+    }
+  }
+
+  bool _expired(String field) =>
+      DateTime.tryParse(_session?[field]?.toString() ?? '')
+          ?.isAfter(DateTime.now().toUtc()) !=
+      true;
+  Future<void> clearSession() async {
+    final url = baseUrl;
+    _revision++;
+    token = null;
+    _session = null;
+    onSessionInvalidated?.call();
+    await _storage(() => sessionStore.clear(url));
+  }
+
+  Future<void> logoutSession() async {
+    final old = _session?['refresh_token'];
+    await clearSession();
+    if (old != null) {
+      try {
+        await _jsonRequest('/auth/mobile/logout',
+            method: 'POST', body: {'refresh_token': old});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _acceptSession(
+          Map<String, dynamic> data, int revision, String url) =>
+      _storage(() async {
+        _checkRevision(revision, url);
+        if (!_validSession(data))
+          throw ApiException(502, 'Invalid login response from server.');
+        await sessionStore.write(url, data);
+        _checkRevision(revision, url);
+        _session = Map<String, dynamic>.from(data);
+        token = data['access_token'] as String;
+      });
+
+  Future<void> _refreshSession() {
+    final existing = _refreshing;
+    if (existing != null) return existing;
+    final future = _performRefresh();
+    _refreshing = future;
+    return future.whenComplete(() {
+      if (identical(_refreshing, future)) _refreshing = null;
+    });
+  }
+
+  Future<void> _performRefresh() async {
+    if (_session == null || _expired('session_expires_at')) {
+      throw ApiException(401, 'Your session expired. Sign in again.');
+    }
+    final rev = _revision;
+    final url = baseUrl;
+    _session!['refresh_request_id'] ??= List.generate(
+            24,
+            (_) =>
+                Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
+        .join();
+    final pending = Map<String, dynamic>.from(_session!);
+    await _storage(() async {
+      _checkRevision(rev, url);
+      await sessionStore.write(url, pending);
+    });
+    _checkRevision(rev, url);
+    final response = await _client
+        .post(Uri.parse('$url/auth/mobile/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'refresh_token': pending['refresh_token'],
+              'request_id': pending['refresh_request_id']
+            }))
+        .timeout(const Duration(seconds: 10));
+    if (rev != _revision || url != baseUrl) {
+      throw StateError('Session changed.');
+    }
+    if (response.statusCode == 401) {
+      await clearSession();
+      throw ApiException(401, 'Your session expired. Sign in again.');
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(
+          response.statusCode, 'Could not refresh login. Try again.');
+    }
+    await _acceptSession(
+        (jsonDecode(response.body) as Map).cast<String, dynamic>(), rev, url);
+  }
+
+  Future<http.Response> _send(String method, String path,
+      {Object? body, bool retry = true}) async {
+    final rev = _revision;
+    final url = baseUrl;
+    if (_session != null && _expired('access_expires_at')) {
+      await _refreshSession();
+    }
+    _checkRevision(rev, url);
+    final request = http.Request(method, Uri.parse('$url$path'))
+      ..headers.addAll(_headers);
+    if (body != null) request.body = jsonEncode(body);
+    final response = await http.Response.fromStream(
+            await _client.send(request).timeout(const Duration(seconds: 10)))
+        .timeout(const Duration(seconds: 10));
+    if (rev != _revision) throw StateError('Session changed.');
+    if (response.statusCode == 401 && retry && _session != null) {
+      await _refreshSession();
+      _checkRevision(rev, url);
+      return _send(method, path, body: body, retry: false);
+    }
+    if (response.statusCode == 401 && _session != null) await clearSession();
+    return response;
+  }
+
+  Future<String> loginMobile(String email, String password) async {
+    final rev = _revision, url = baseUrl;
+    final data = await _jsonRequest('/auth/mobile/login',
+        method: 'POST', body: {'email': email, 'password': password});
+    await _acceptSession(data, rev, url);
+    return data['access_token'] as String;
+  }
+
+  Future<String> registerMobile(
+      String email, String password, String firstName, String lastName) async {
+    final rev = _revision, url = baseUrl;
+    final data =
+        await _jsonRequest('/auth/mobile/register', method: 'POST', body: {
+      'email': email,
+      'password': password,
+      'first_name': firstName.isEmpty ? null : firstName,
+      'last_name': lastName.isEmpty ? null : lastName
+    });
+    await _acceptSession(data, rev, url);
+    return data['access_token'] as String;
+  }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
@@ -23,30 +202,7 @@ class ApiService {
     String method = 'GET',
     Object? body,
   }) async {
-    final uri = Uri.parse('$baseUrl$path');
-    late Future<http.Response> pendingResponse;
-
-    switch (method) {
-      case 'POST':
-        pendingResponse =
-            _client.post(uri, headers: _headers, body: jsonEncode(body));
-        break;
-      case 'PUT':
-        pendingResponse =
-            _client.put(uri, headers: _headers, body: jsonEncode(body));
-        break;
-      case 'PATCH':
-        pendingResponse =
-            _client.patch(uri, headers: _headers, body: jsonEncode(body));
-        break;
-      case 'DELETE':
-        pendingResponse = _client.delete(uri, headers: _headers);
-        break;
-      default:
-        pendingResponse = _client.get(uri, headers: _headers);
-    }
-
-    final response = await pendingResponse.timeout(const Duration(seconds: 10));
+    final response = await _send(method, path, body: body);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Request failed (${response.statusCode})';
@@ -85,7 +241,7 @@ class ApiService {
         // Keep the status-code fallback when the server response is not JSON.
       }
 
-      throw Exception(message);
+      throw ApiException(response.statusCode, message);
     }
 
     if (response.body.isEmpty) return {};
@@ -121,14 +277,29 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> me() => _jsonRequest('/auth/me');
+  Future<Map<String, dynamic>> removeDevice(int id) =>
+      _jsonRequest('/devices/$id/removal', method: 'POST');
+  Future<Map<String, dynamic>> getDeviceOperation(String id) =>
+      _jsonRequest('/device-operations/$id');
+  Future<Map<String, dynamic>> createWifiSession(int id, String challenge) =>
+      _jsonRequest('/devices/$id/wifi-session',
+          method: 'POST', body: {'challenge': challenge});
+  Future<Map<String, dynamic>> createResetAuthorization(
+          String id, String challenge, {bool completion = false}) =>
+      _jsonRequest(
+          '/device-operations/$id/${completion ? 'completion-authorization' : 'ble-authorization'}',
+          method: 'POST',
+          body: {'challenge': challenge});
+  Future<Map<String, dynamic>> submitResetReceipt(
+          Map<String, dynamic> receipt) =>
+      _jsonRequest('/device-runtime/reset-complete',
+          method: 'POST', body: {'receipt': receipt});
 
   Future<List<Device>> getDevices() async {
-    final uri = Uri.parse('$baseUrl/devices');
-    final response = await _client
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/devices');
     if (response.statusCode != 200) {
-      throw Exception('Could not load devices (${response.statusCode})');
+      throw ApiException(response.statusCode,
+          'Could not load devices (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -202,12 +373,10 @@ class ApiService {
   }
 
   Future<List<MusicTrack>> getMusic() async {
-    final uri = Uri.parse('$baseUrl/music');
-    final response = await _client
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/music');
     if (response.statusCode != 200) {
-      throw Exception('Could not load music (${response.statusCode})');
+      throw ApiException(
+          response.statusCode, 'Could not load music (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -217,28 +386,19 @@ class ApiService {
   }
 
   Future<Uint8List> downloadMusic(int musicId) async {
-    final uri = Uri.parse('$baseUrl/music/$musicId/download');
-    final headers = {
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
-    final response = await _client
-        .get(uri, headers: headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/music/$musicId/download');
     if (response.statusCode != 200) {
-      throw Exception('Music download failed (${response.statusCode})');
+      throw ApiException(response.statusCode,
+          'Music download failed (${response.statusCode})');
     }
     return response.bodyBytes;
   }
 
   Future<List<Map<String, dynamic>>> getSchedules(int deviceId) async {
-    final uri = Uri.parse(
-      '$baseUrl/schedules/device/$deviceId',
-    );
-    final response = await _client
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/schedules/device/$deviceId');
     if (response.statusCode != 200) {
-      throw Exception('Could not load schedules (${response.statusCode})');
+      throw ApiException(response.statusCode,
+          'Could not load schedules (${response.statusCode})');
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
@@ -269,12 +429,10 @@ class ApiService {
   }
 
   Future<List<LilyHome>> getHomes() async {
-    final uri = Uri.parse('$baseUrl/homes');
-    final response = await _client
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/homes');
     if (response.statusCode != 200) {
-      throw Exception(_messageFromResponse(response, 'Could not load homes'));
+      throw ApiException(response.statusCode,
+          _messageFromResponse(response, 'Could not load homes'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -283,12 +441,10 @@ class ApiService {
   }
 
   Future<List<LilyRoom>> getRooms(int homeId) async {
-    final uri = Uri.parse('$baseUrl/homes/$homeId/rooms');
-    final response = await _client
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
+    final response = await _send('GET', '/homes/$homeId/rooms');
     if (response.statusCode != 200) {
-      throw Exception(_messageFromResponse(response, 'Could not load rooms'));
+      throw ApiException(response.statusCode,
+          _messageFromResponse(response, 'Could not load rooms'));
     }
     final list = jsonDecode(response.body) as List<dynamic>;
     return list
@@ -342,4 +498,12 @@ class ApiService {
     } catch (_) {}
     return '$fallback (${response.statusCode})';
   }
+}
+
+class ApiException implements Exception {
+  ApiException(this.statusCode, this.message);
+  final int statusCode;
+  final String message;
+  @override
+  String toString() => message;
 }

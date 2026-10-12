@@ -1,7 +1,7 @@
 name: lily_mobile
 description: Lily RGB/audio device companion application.
 publish_to: "none"
-version: 0.7.2+4
+version: 0.8.0+5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -12,6 +12,7 @@ dependencies:
   http: ^1.2.2
   provider: ^6.1.2
   shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.4
   wifi_iot: ^0.3.19
   flutter_reactive_ble: ^5.6.0
   permission_handler: ^12.0.1

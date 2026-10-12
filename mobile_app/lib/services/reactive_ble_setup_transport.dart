@@ -8,7 +8,7 @@ import 'ble_provision_protocol.dart';
 import 'ble_provision_service.dart';
 
 class ReactiveBleSetupTransport implements BleSetupTransport {
-  final _ble = FlutterReactiveBle();
+  late final _ble = FlutterReactiveBle();
   StreamSubscription<DiscoveredDevice>? _scan;
   StreamSubscription<ConnectionStateUpdate>? _connection;
   Completer<List<BleSetupDevice>>? _scanResult;

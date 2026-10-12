@@ -12,6 +12,8 @@ RUN pip install -r requirements.txt \
     && chown -R lily:lily /data
 
 COPY --chown=lily:lily app ./app
+COPY --chown=lily:lily migrations ./migrations
+COPY --chown=lily:lily alembic.ini ./alembic.ini
 USER lily
 EXPOSE 6100
 

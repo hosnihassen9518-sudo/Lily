@@ -147,3 +147,7 @@ devices/<SERIAL>/state
 The ESP32 synchronizes time over NTP and applies the Europe/Paris timezone including daylight-saving transitions. Schedules received over MQTT are persisted in LittleFS and executed locally, so the mobile app does not need to remain open.
 
 If a future hardware version needs schedules to survive long internet outages and full power loss without NTP access, an RTC can be added later without changing the backend/mobile schedule format.
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).

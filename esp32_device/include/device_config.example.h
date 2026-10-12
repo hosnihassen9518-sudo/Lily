@@ -29,3 +29,7 @@
 #define MIC_BCLK_PIN        15
 #define MIC_WS_PIN          16
 #define MIC_DATA_PIN        17
+
+// For 0.8.0 management, prefer the admin-generated device_config.h.
+// Legacy boards: export device_public_key.h from the server signing key,
+// and include it here; never put the server private key on a device.

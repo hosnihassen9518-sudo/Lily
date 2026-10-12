@@ -19,6 +19,43 @@ from app.schemas.auth import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from app.models.device_lifecycle import MobileSession
+from app.services.mobile_sessions import issue_mobile_session, rotate_mobile_session, digest
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=20, max_length=256)
+    request_id: str = Field(min_length=8, max_length=64)
+
+class LogoutRequest(BaseModel):
+    refresh_token: str = Field(min_length=20, max_length=256)
+
+@router.post('/mobile/login')
+def mobile_login(payload: LoginRequest, db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(401, 'Invalid credentials')
+    return issue_mobile_session(db, user)
+
+@router.post('/mobile/register')
+def mobile_register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    register(payload, db)
+    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    return issue_mobile_session(db, user)
+
+@router.post('/mobile/refresh')
+def mobile_refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+    return rotate_mobile_session(db, payload.refresh_token, payload.request_id)
+
+@router.post('/mobile/logout')
+def mobile_logout(payload: LogoutRequest, db: Session = Depends(get_db)):
+    hashed = digest(payload.refresh_token)
+    row = db.scalar(select(MobileSession).where((MobileSession.current_refresh_hash == hashed) | (MobileSession.previous_refresh_hash == hashed)))
+    if row:
+        row.revoked_at = datetime.now(timezone.utc); db.commit()
+    return {'ok':True}
+
 @router.post("/register", response_model=TokenResponse)
 def register(
     payload: RegisterRequest,

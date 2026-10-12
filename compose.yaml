@@ -37,6 +37,11 @@ services:
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the root .env}"
       DATABASE_URL: sqlite:////data/lily.db
       MUSIC_DIR: /data/music
+      DEVICE_SIGNING_KEY_FILE: /data/device-signing.pem
+      FACTORY_BACKEND_HOST: "${FACTORY_BACKEND_HOST:-192.168.1.100}"
+      FACTORY_BACKEND_PORT: "${BACKEND_PORT:-6100}"
+      FACTORY_MQTT_HOST: "${FACTORY_MQTT_HOST:-192.168.1.100}"
+      FACTORY_MQTT_PORT: "${MQTT_PORT:-1883}"
       MQTT_ENABLED: "true"
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"

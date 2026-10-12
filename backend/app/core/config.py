@@ -5,6 +5,11 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     secret_key: str = "change-me"
+    device_signing_key_file: str | None = None
+    factory_backend_host: str = '192.168.1.100'
+    factory_backend_port: int = 6100
+    factory_mqtt_host: str = '192.168.1.100'
+    factory_mqtt_port: int = 1883
     access_token_expire_minutes: int = 30
 
     database_url: str = "sqlite:///./lily.db"

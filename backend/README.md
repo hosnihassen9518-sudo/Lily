@@ -84,3 +84,7 @@ The API still runs when MQTT is disabled. Control endpoints return:
 ```
 
 until MQTT is enabled.
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).
