@@ -66,9 +66,10 @@ class BleProvisionService {
       _check(revision, requireConnection: true);
       if (info['serial'] is! String ||
           (info['serial'] as String).isEmpty ||
-          info['device_type_key'] != 'test_light') {
+          !['test_light', 'lily_audio_light']
+              .contains(info['device_type_key'])) {
         throw const FormatException(
-            'This device is not compatible with Lily test-light BLE setup.');
+            'This device is not compatible with Lily Bluetooth setup.');
       }
       final started = DateTime.now();
       while (true) {
@@ -251,6 +252,54 @@ class BleProvisionService {
   Future<void> disconnect() async {
     _revision++;
     await _transport.disconnect();
+  }
+
+  Future<Map<String, dynamic>> readManagementInfo() async {
+    final revision = _revision;
+    _check(revision, requireConnection: true);
+    final info = BleProvisionProtocol.decodeObject(
+        await _transport.readInfo().timeout(const Duration(seconds: 10)));
+    _check(revision, requireConnection: true);
+    if (info['management'] != true) {
+      throw StateError(
+          'Install compatible 0.8.0 firmware to manage Wi-Fi and reset.');
+    }
+    return info;
+  }
+
+  Future<Map<String, dynamic>> runManagementCommand(
+      String command, Map<String, dynamic> fields) async {
+    final revision = _revision;
+    _check(revision, requireConnection: true);
+    if (_provisioning) throw StateError('Wait for the current device request.');
+    _provisioning = true;
+    try {
+      final id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+      await _send(
+          BleProvisionProtocol.encodeCommand(
+              {...fields, 'version': 1, 'request_id': id, 'command': command}),
+          revision);
+      final started = DateTime.now();
+      while (DateTime.now().difference(started) < provisionTimeout) {
+        _check(revision, requireConnection: true);
+        final status = BleProvisionProtocol.decodeStatus(
+            await _transport.readStatus().timeout(const Duration(seconds: 10)),
+            id);
+        if (status?['stage'] == 'error') {
+          throw StateError(
+              status?['detail']?.toString() ?? 'Device operation failed.');
+        }
+        if (status?['stage'] == 'success' ||
+            status?['stage'] == 'reset_complete') {
+          return status!;
+        }
+        await Future<void>.delayed(pollInterval);
+      }
+      throw TimeoutException(
+          'Device did not confirm the operation. Reconnect and check progress.');
+    } finally {
+      _provisioning = false;
+    }
   }
 
   Future<void> dispose() async {

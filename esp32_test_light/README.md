@@ -31,3 +31,7 @@ If the home Wi-Fi credentials fail, the setup AP stays available and `/provision
 ## Expected app behavior
 
 The backend assigns device type `test_light` with capabilities `power` + `light`. In My Devices, the device is shown with online/offline status. Open the device and toggle Light; the existing Lily endpoint publishes an MQTT `light` command and GPIO18 changes HIGH/LOW.
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).

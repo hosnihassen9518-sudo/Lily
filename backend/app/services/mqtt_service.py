@@ -1,4 +1,6 @@
 import json
+import logging
+from threading import Event, Thread, RLock
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
@@ -13,6 +15,9 @@ from app.models.smart_device import DeviceState, DeviceTelemetry
 class MQTTService:
     def __init__(self):
         self.started = False
+        self._cleanup_lock=RLock()
+        self._cleanup_stop=Event()
+        self._cleanup_wake=Event()
         self.client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
             client_id="lily-backend",
@@ -31,31 +36,42 @@ class MQTTService:
         self.client.connect_async(settings.mqtt_host, settings.mqtt_port, keepalive=60)
         self.client.loop_start()
         self.started = True
+        self._cleanup_stop.clear()
+        Thread(target=self._cleanup_loop,daemon=True).start()
 
     def stop(self):
         if self.started:
+            self._cleanup_stop.set();self._cleanup_wake.set()
             self.client.loop_stop()
             self.client.disconnect()
             self.started = False
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         print(f"MQTT connected: {reason_code}")
+        self._cleanup_wake.set()
         # V0.4 topics remain supported.
         for topic in (
-            "devices/+/status",
-            "devices/+/heartbeat",
-            "devices/+/state",
-            "devices/+/telemetry",
-            # V0.5 canonical smart-home topics for future firmware.
-            "homes/+/devices/+/status",
-            "homes/+/devices/+/heartbeat",
-            "homes/+/devices/+/state",
-            "homes/+/devices/+/telemetry",
+            "devices/+/status", "devices/+/heartbeat", "devices/+/state", "devices/+/telemetry",
+            "homes/+/devices/+/status", "homes/+/devices/+/heartbeat", "homes/+/devices/+/state", "homes/+/devices/+/telemetry",
         ):
-            client.subscribe(topic, qos=1)
+            client.subscribe(topic,qos=1)
+
+    def _cleanup_loop(self):
+        while not self._cleanup_stop.is_set():
+            try:self.retry_pending_cleanup()
+            except Exception:logging.exception('Retained cleanup retry failed')
+            self._cleanup_wake.wait(15);self._cleanup_wake.clear()
+
+    def retry_pending_cleanup(self):
+        if not self.client.is_connected():return
+        from app.models.device_lifecycle import DeviceOperation
+        from app.api.device_operations import cleanup_retained_operation
+        with SessionLocal() as db:
+            ids=list(db.scalars(select(DeviceOperation.id).where(DeviceOperation.broker_cleanup_pending==1)))
+            for operation_id in ids:cleanup_retained_operation(db,operation_id)
 
     def _get_device(self, db, serial: str):
-        return db.scalar(select(Device).where(Device.serial_number == serial))
+        return db.scalar(select(Device).where(Device.serial_number == serial).with_for_update().execution_options(populate_existing=True))
 
     @staticmethod
     def _topic_identity(topic: str):
@@ -95,10 +111,18 @@ class MQTTService:
         except Exception:
             return
 
+        if not isinstance(payload,dict):return
         now = datetime.now(timezone.utc)
         with SessionLocal() as db:
             device = self._get_device(db, serial)
             if not device:
+                return
+
+            from app.models.device_lifecycle import DeviceIdentity
+            identity=db.get(DeviceIdentity,device.id)
+            if identity and identity.protocol_version==1 and (type(payload.get("generation")) is not int or payload["generation"]!=identity.generation):
+                return
+            if device.lifecycle_status in ("RESET_PENDING", "INVENTORY"):
                 return
 
             if event == "status":
@@ -148,7 +172,8 @@ class MQTTService:
 
             db.commit()
 
-    def publish_command(self, serial: str, payload: dict):
+    def publish_command(self, serial: str, payload: dict, generation=None):
+        if generation is not None: payload={**payload,"generation":generation}
         if not self.started:
             return False
         result = self.client.publish(
@@ -156,13 +181,29 @@ class MQTTService:
         )
         return result.rc == mqtt.MQTT_ERR_SUCCESS
 
-    def publish_schedule(self, serial: str, payload: dict):
+    def publish_schedule(self, serial: str, payload: dict, generation=None):
+        if generation is not None: payload={**payload,"generation":generation}
         if not self.started:
             return False
         result = self.client.publish(
             f"devices/{serial}/schedule", json.dumps(payload), qos=1, retain=True
         )
         return result.rc == mqtt.MQTT_ERR_SUCCESS
+
+    def clear_device_retained(self, serial: str):
+        if not self.started or not self.client.is_connected():
+            return False
+        ok=True
+        for suffix in ('schedule','state','status'):
+            result=self.client.publish(f'devices/{serial}/{suffix}',b'',qos=1,retain=True)
+            if result.rc!=mqtt.MQTT_ERR_SUCCESS:
+                ok=False;continue
+            try:
+                result.wait_for_publish(timeout=2)
+                ok=ok and result.is_published()
+            except (RuntimeError,ValueError):
+                ok=False
+        return ok
 
 
 mqtt_service = MQTTService()

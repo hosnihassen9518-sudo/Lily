@@ -18,12 +18,22 @@ export default function DevicesPage() {
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    serial_number: "",
-    device_secret: "",
-    model: "LILY-V1",
-    hardware_version: "1.0",
-  });
+  const [types, setTypes] = useState([]);
+  const [models, setModels] = useState([]);
+  const [generated, setGenerated] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({device_type_id: '', model_key: ''});
+  useEffect(() => {
+    Promise.all([api.deviceTypes(), api.deviceModels()]).then(([t, m]) => {
+      setTypes(t); setModels(m);
+    }).catch(err => setError(err.message));
+  }, []);
+  function downloadHeader() {
+    const url = URL.createObjectURL(new Blob([generated.config_header], {type: 'text/plain'}));
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = generated.filename; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   async function load() {
     try {
@@ -51,19 +61,13 @@ export default function DevicesPage() {
 
   async function createDevice(e) {
     e.preventDefault();
+    if (creating) return;
+    setCreating(true); setError('');
     try {
-      await api.createDevice(form);
-      setShowCreate(false);
-      setForm({
-        serial_number: "",
-        device_secret: "",
-        model: "LILY-V1",
-        hardware_version: "1.0",
-      });
+      setGenerated(await api.generateDevice({...form, device_type_id: Number(form.device_type_id)}));
       await load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setCreating(false); }
   }
 
   async function toggleDisabled(d) {
@@ -187,56 +191,32 @@ export default function DevicesPage() {
       </div>
 
       {showCreate && (
-        <Modal title="Add inventory device" onClose={() => setShowCreate(false)}>
-          <form className="form-grid" onSubmit={createDevice}>
-            <label>
-              Serial number
-              <input
-                value={form.serial_number}
-                onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
-                placeholder="LILY-000001"
-                required
-              />
+        <Modal title="Add inventory device" onClose={() => { if (!creating) setShowCreate(false); }}>
+          {generated ? <div className="form-grid">
+            <strong>{generated.serial_number}</strong>
+            <p>Save this file now. The device secret cannot be retrieved later.</p>
+            <p>Copy it to the selected firmware target as include/device_config.h, then build and upload with PlatformIO.</p>
+            <button className="primary-button" onClick={downloadHeader}>Download ESP32 configuration</button>
+            <button className="secondary-button" onClick={() => { if (confirm("Have you saved the configuration file? Its secret cannot be retrieved later.")) setGenerated(null); }}>Create another device</button>
+          </div> : <form className="form-grid" onSubmit={createDevice}>
+            <label>Device type
+              <select required value={form.device_type_id} onChange={e => setForm({device_type_id: e.target.value, model_key: ''})}>
+                <option value="">Select a type</option>
+                {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
             </label>
-
-            <label>
-              Device secret
-              <input
-                value={form.device_secret}
-                onChange={(e) => setForm({ ...form, device_secret: e.target.value })}
-                placeholder="At least 16 characters"
-                minLength={16}
-                required
-              />
-              <small>This must match the factory secret flashed to the ESP32.</small>
+            <label>Model
+              <select required value={form.model_key} onChange={e => setForm({...form, model_key: e.target.value})}>
+                <option value="">Select a compatible model</option>
+                {models.filter(m => m.device_type_id === Number(form.device_type_id)).map(m => <option key={m.key} value={m.key}>{m.name}</option>)}
+              </select>
             </label>
-
-            <div className="two-columns">
-              <label>
-                Model
-                <input
-                  value={form.model}
-                  onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  required
-                />
-              </label>
-
-              <label>
-                Hardware version
-                <input
-                  value={form.hardware_version}
-                  onChange={(e) => setForm({ ...form, hardware_version: e.target.value })}
-                />
-              </label>
-            </div>
-
+            {form.device_type_id && !models.some(m => m.device_type_id === Number(form.device_type_id)) && <p>No supported firmware model is available for this type.</p>}
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setShowCreate(false)}>
-                Cancel
-              </button>
-              <button className="primary-button">Create device</button>
+              <button type="button" className="secondary-button" disabled={creating} onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="primary-button" disabled={creating}>{creating ? 'Creating…' : 'Generate device'}</button>
             </div>
-          </form>
+          </form>}
         </Modal>
       )}
     </>

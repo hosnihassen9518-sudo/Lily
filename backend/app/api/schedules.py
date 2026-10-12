@@ -16,6 +16,8 @@ def sync_device_schedule(
     db: Session,
     device: Device,
 ):
+    from app.api.device_operations import require_mutable, device_generation
+    require_mutable(device)
     schedules = db.scalars(
         select(Schedule).where(
             Schedule.device_id == device.id,
@@ -42,6 +44,7 @@ def sync_device_schedule(
     mqtt_service.publish_schedule(
         device.serial_number,
         payload,
+        generation=device_generation(db,device),
     )
 
 @router.get("/device/{device_id}")
@@ -50,7 +53,8 @@ def list_schedules(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    from app.api.device_operations import locked_device
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -58,6 +62,8 @@ def list_schedules(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     schedules = db.scalars(
         select(Schedule).where(
             Schedule.device_id == device.id
@@ -83,7 +89,8 @@ def create_schedule(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    from app.api.device_operations import locked_device
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -91,6 +98,8 @@ def create_schedule(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     schedule = Schedule(
         device_id=device.id,
         user_id=user.id,
@@ -102,10 +111,10 @@ def create_schedule(
     )
 
     db.add(schedule)
+    db.flush()
+    sync_device_schedule(db, device)
     db.commit()
     db.refresh(schedule)
-
-    sync_device_schedule(db, device)
 
     return {
         "id": schedule.id,
@@ -130,12 +139,16 @@ def delete_schedule(
             detail="Schedule not found",
         )
 
-    device = db.get(Device, schedule.device_id)
+    from app.api.device_operations import locked_device
+    device = locked_device(db,device_id=schedule.device_id)
 
+    from app.api.device_operations import require_mutable
+    if device: require_mutable(device)
+    if not device or device.owner_id!=user.id:
+        raise HTTPException(404,"Device not found")
     db.delete(schedule)
+    db.flush()
+    sync_device_schedule(db, device)
     db.commit()
-
-    if device:
-        sync_device_schedule(db, device)
 
     return {"ok": True}

@@ -70,7 +70,7 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
         devices = result;
         selectedDeviceId = result.isEmpty ? null : result.first.id;
         message = result.isEmpty
-            ? 'No Lily device found. Power on the updated test-light firmware and enable Bluetooth.'
+            ? 'No Lily device found. Power on Lily with updated firmware and enable Bluetooth.'
             : 'Choose your Lily device.';
       });
     } catch (error) {
@@ -92,10 +92,22 @@ class _PairDeviceScreenState extends State<PairDeviceScreen> {
       final info = await provision!.connect(selected);
       if (!mounted) return;
       final state = context.read<AppState>();
+      if(info['reset_pending']==true) {
+        final status=await provision!.runManagementCommand('receipt',{});
+        final receipt=(status['receipt'] as Map?)?.cast<String,dynamic>();
+        if(receipt==null || receipt['signature']==null)throw StateError('Lily is still erasing settings. Reconnect and retry.');
+        await state.api.submitResetReceipt(receipt);
+        final current=await provision!.readManagementInfo();
+        final operationId=(receipt['body'] as String).split('|')[2];
+        final authorization=await state.api.createResetAuthorization(operationId,current['challenge'] as String,completion:true);
+        await provision!.runManagementCommand('reset_ack',{'challenge':current['challenge'],'authorization':authorization['authorization']});
+        await provision!.disconnect();
+        throw StateError('Reset confirmed. Lily is restarting Bluetooth setup. Scan and connect again.');
+      }
       setState(() {
         deviceInfo = info;
         deviceName.text =
-            info['device_type_name']?.toString() ?? 'Lily Test Light';
+            info['device_type_name']?.toString() ?? 'Lily';
         selectedHomeId = state.homes.isEmpty ? null : state.homes.first.id;
         selectedRoomId = null;
         registered = false;

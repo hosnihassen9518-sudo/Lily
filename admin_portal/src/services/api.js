@@ -41,6 +41,8 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  mobileSessionPolicy: () => request('/admin/mobile-session-policy'),
+  setMobileSessionPolicy: (payload) => request('/admin/mobile-session-policy', {method:'PATCH',body:JSON.stringify(payload)}),
   login: (email, password) =>
     request("/auth/login", {
       method: "POST",
@@ -63,6 +65,8 @@ export const api = {
       body: JSON.stringify({ active }),
     }),
 
+  deviceModels: () => request('/admin/device-models'),
+  generateDevice: (payload) => request('/admin/device-inventory', {method: 'POST', body: JSON.stringify(payload)}),
   devices: () => request("/devices/admin/all"),
   createDevice: (payload) =>
     request("/devices/admin", {

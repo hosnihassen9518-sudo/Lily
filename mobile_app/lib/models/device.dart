@@ -65,7 +65,7 @@ class Device {
       name: json['name'] as String?,
       model: json['model'] as String? ?? 'LILY-V1',
       status: json['status'] as String? ?? 'OFFLINE',
-      online: json['online'] as bool? ?? false,
+      online: json['status'] == 'RESET_PENDING' ? false : (json['online'] as bool? ?? false),
       lastSeen: json['last_seen'] == null ? null : DateTime.tryParse(json['last_seen'].toString()),
       firmware: json['firmware_version'] as String?,
       wifiRssi: json['wifi_rssi'] as int?,

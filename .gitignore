@@ -45,6 +45,7 @@ pnpm-debug.log*
 .flutter-plugins-dependencies
 mobile_app/build/
 mobile_app/android/.gradle/
+mobile_app/android/.kotlin/
 mobile_app/android/local.properties
 mobile_app/android/key.properties
 *.jks

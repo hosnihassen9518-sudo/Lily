@@ -10,12 +10,53 @@ from app.models.home import Home, Room
 from app.models.smart_device import DeviceTelemetry, DeviceType
 from app.models.user import User
 from app.schemas.admin import ActiveUpdate
+from pydantic import BaseModel
+from app.models.device_lifecycle import DeviceModel
+
+class InventoryCreate(BaseModel):
+    device_type_id: int
+    model_key: str
+
+from pydantic import Field
+class SessionPolicy(BaseModel):
+    months: int = Field(strict=True, ge=1, le=12)
 
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
     dependencies=[Depends(require_admin)],
 )
+
+@router.get('/device-models')
+def device_models(device_type_id: int | None = None, db: Session = Depends(get_db)):
+    query = select(DeviceModel)
+    if device_type_id is not None:
+        query = query.where(DeviceModel.device_type_id == device_type_id)
+    return [{'key': m.key, 'name': m.name, 'device_type_id': m.device_type_id, 'firmware_target': m.firmware_target} for m in db.scalars(query)]
+
+@router.get('/device-factory-public-key')
+def factory_public_key():
+    from app.services.device_authorization import signing_key, public_pem
+    return {'public_key':public_pem(signing_key().public_key())}
+
+@router.post('/device-inventory')
+def generated_inventory(payload: InventoryCreate, db: Session = Depends(get_db)):
+    from app.services.device_inventory import create_inventory
+    return create_inventory(db, payload.device_type_id, payload.model_key)
+
+@router.get('/mobile-session-policy')
+def session_policy(db: Session = Depends(get_db)):
+    from app.services.mobile_sessions import months_policy
+    return {'months':months_policy(db)}
+
+@router.patch('/mobile-session-policy')
+def update_session_policy(payload: SessionPolicy, db: Session = Depends(get_db)):
+    from app.models.device_lifecycle import AppSetting
+    row = db.get(AppSetting, 'mobile_session_months')
+    if row is None:
+        row = AppSetting(key='mobile_session_months', value_json={}); db.add(row)
+    row.value_json = {'months':payload.months}; db.commit()
+    return row.value_json
 
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)):

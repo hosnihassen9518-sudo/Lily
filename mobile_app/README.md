@@ -76,3 +76,20 @@ iOS requires the Hotspot Configuration capability for programmatic Wi-Fi joining
 ## Important web limitation
 
 Browsers generally cannot programmatically join an ESP32 Wi-Fi network. The same Flutter app can run on Web for account/device control, but initial Wi-Fi provisioning is intended for Android/iOS.
+
+## Device lifecycle and session policy
+
+See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).
+
+## Phone name and launcher icon
+
+Android and iOS display the application as **Lily** and use the existing smiling-cloud artwork for the launcher icon. The artwork is stored at `assets/branding/lily_cloud.png`; the Android density resources and iOS AppIcon catalog are generated and committed. Regenerate them from `mobile_app` using:
+
+```sh
+flutter pub get
+dart run tool/generate_launcher_icons.dart
+```
+
+The generation wrapper preserves the existing Xcode configuration because the icon generator also rewrites unrelated asset-symbol settings.
+
+The branding update is version 0.8.1 (build 6). Package/bundle identifiers remain the existing values so the display-name change can be installed as an update with the same signing key.

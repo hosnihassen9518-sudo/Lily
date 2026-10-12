@@ -28,9 +28,12 @@ def _home_for_user(db: Session, home_id: int, user_id: int) -> Home:
 
 
 def _owned_device(db: Session, device_id: int, user_id: int) -> Device:
-    device = db.get(Device, device_id)
+    from app.api.device_operations import locked_device
+    device = locked_device(db,device_id=device_id)
     if not device or device.owner_id != user_id:
         raise HTTPException(status_code=404, detail="Device not found")
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     return device
 
 
@@ -186,7 +189,9 @@ def set_state(device_id: int, payload: DeviceStateUpdate, user: User = Depends(g
 @router.post("/devices/{device_id}/command")
 def generic_command(device_id: int, payload: GenericCommand, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     device = _owned_device(db, device_id, user.id)
-    delivered = mqtt_service.publish_command(device.serial_number, {"type": payload.type, "payload": payload.payload})
+    from app.api.device_operations import device_generation
+    delivered = mqtt_service.publish_command(device.serial_number, {"type": payload.type, "payload": payload.payload}, generation=device_generation(db,device))
+    db.commit()
     return {"ok": True, "mqtt_published": delivered}
 
 

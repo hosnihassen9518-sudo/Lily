@@ -6,6 +6,9 @@
 #include <LittleFS.h>
 
 #include "device_config.h"
+#include "device_lifecycle.h"
+#include "device_message_rules.h"
+#include "wifi_transaction.h"
 #include "ble_provisioning.h"
 
 static const char* CONFIG_PATH = "/wifi.json";
@@ -94,6 +97,8 @@ bool activateWithBackend() {
   String body;
   serializeJson(doc, body);
   int code = http.POST(body);
+  String response=http.getString();
+  if(code>=200 && code<300){JsonDocument result;deserializeJson(result,response);setDeviceGeneration(result["generation"]|0);}
   http.end();
 
   Serial.printf("Activation HTTP %d\n", code);
@@ -105,6 +110,8 @@ void publishState() {
 
   // Keep the same state shape used by V0.6 so the existing UI updates correctly.
   JsonDocument doc;
+  if(deviceManagementSupported())doc["generation"]=deviceGeneration();
+  if(deviceManagementSupported())doc["generation"]=deviceGeneration();
   JsonObject light = doc["light"].to<JsonObject>();
   light["enabled"] = lightEnabled;
   light["brightness"] = 100;
@@ -121,6 +128,7 @@ void publishHeartbeat() {
   if (!mqtt.connected()) return;
 
   JsonDocument doc;
+  if(deviceManagementSupported())doc["generation"]=deviceGeneration();
   doc["wifi_rssi"] = WiFi.RSSI();
   doc["free_heap"] = ESP.getFreeHeap();
   doc["free_storage"] =
@@ -135,6 +143,7 @@ void publishHeartbeat() {
 }
 
 void handleCommand(const JsonDocument& doc) {
+  if(!deviceRuntimeReady())return;
   const String type = doc["type"] | "";
 
   // Existing V0.6 DeviceCard/DeviceScreen sends this form through /devices/{id}/light.
@@ -167,13 +176,14 @@ void mqttCallback(char* rawTopic, byte* payload, unsigned int length) {
   for (unsigned int i = 0; i < length; i++) incoming += (char)payload[i];
 
   JsonDocument doc;
-  if (!deserializeJson(doc, incoming)) {
-    Serial.printf("MQTT command: %s\n", incoming.c_str());
+  if (!deserializeJson(doc, incoming) && acceptDeviceMessage(deviceRuntimeReady(),deviceManagementSupported(),deviceGeneration(),doc["generation"].is<int>() ? doc["generation"].as<int>() : -1)) {
+    Serial.println("MQTT command received");
     handleCommand(doc);
   }
 }
 
 bool connectMqtt() {
+  if(!deviceRuntimeReady())return false;
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(2048);
@@ -181,20 +191,24 @@ bool connectMqtt() {
 
   const String clientId = "lily-" + String(DEVICE_SERIAL);
   const String statusTopic = topic("status");
+  JsonDocument status;status["status"]="offline";
+  if(deviceManagementSupported())status["generation"]=deviceGeneration();
+  String offline;serializeJson(status,offline);
+  status["status"]="online";String online;serializeJson(status,online);
 
   const bool ok = mqtt.connect(
       clientId.c_str(),
       statusTopic.c_str(),
       1,
       true,
-      "{\"status\":\"offline\"}");
+      offline.c_str());
   if (!ok) {
     Serial.printf("MQTT connection failed rc=%d\n", mqtt.state());
     return false;
   }
 
   mqtt.subscribe(topic("command").c_str(), 1);
-  mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}", true);
+  mqtt.publish(statusTopic.c_str(), online.c_str(), true);
   publishState();
   publishHeartbeat();
   Serial.println("MQTT connected");
@@ -217,7 +231,7 @@ bool provisionOverBle(const BleWifiRequest& request, String& detail) {
   } else {
     bleProvisionStatus(request.requestId, "activating");
     pairingToken = request.token;
-    const bool activated = activateWithBackend();
+    const bool activated = request.command=="update_wifi" ? confirmWifiConnection() : activateWithBackend();
     pairingToken = "";
     if (activated) {
       if (saveConfig(request.ssid, request.password)) {
@@ -269,20 +283,24 @@ void setup() {
   applyLight();
 
   if (!LittleFS.begin(true)) Serial.println("LittleFS mount failed");
-  loadConfig();
+  beginDeviceLifecycle([](){
+    lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
+    const char* files[]={"/wifi.json","/wifi.tmp"};
+    for(auto path:files)if(LittleFS.exists(path) && !LittleFS.remove(path))return false;
+    return true;
+  });
+  if(!deviceResetPending())loadConfig();
 
   WiFi.mode(WIFI_OFF);
   connectStoredWifi();
-  if (WiFi.status() != WL_CONNECTED) {
-    WiFi.disconnect(false, false);
-    WiFi.mode(WIFI_OFF);
-    beginBleProvisioning(!homeSsid.isEmpty(), provisionOverBle);
-  }
+  if(WiFi.status()!=WL_CONNECTED){WiFi.disconnect(false,false);WiFi.mode(WIFI_OFF);}
+  beginBleProvisioning(!homeSsid.isEmpty(), provisionOverBle);
   // Saved Wi-Fi runs normally; new credentials are received over BLE.
 
 }
 
 void loop() {
+  pollDeviceLifecycle();
   pollBleProvisioning();
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -291,7 +309,7 @@ void loop() {
       lastReconnectAttempt = millis();
     }
 
-    mqtt.loop();
+    if(deviceRuntimeReady())mqtt.loop();
 
     if (millis() - lastHeartbeat > 30000) {
       lastHeartbeat = millis();

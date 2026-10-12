@@ -7,7 +7,24 @@ import '../services/api_service.dart';
 import '../models/backend_settings.dart';
 
 class AppState extends ChangeNotifier {
-  AppState({ApiService? api}) : api = api ?? ApiService();
+  AppState({ApiService? api}) : api = api ?? ApiService() {
+    this.api.onSessionInvalidated = () {
+      _sessionRevision++;
+      profile = null;
+      devices = [];
+      music = [];
+      homes = [];
+      rooms = [];
+      notifyListeners();
+    };
+  }
+
+  @override
+  void dispose() {
+    api.onSessionInvalidated = null;
+    super.dispose();
+  }
+
   final ApiService api;
   int _sessionRevision = 0;
   BackendSettings get backendSettings => BackendSettings.fromUrl(api.baseUrl);
@@ -50,13 +67,26 @@ class AppState extends ChangeNotifier {
       }
     }
     api.token = prefs.getString('access_token');
+    try {
+      await api.restoreSession();
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        await logout();
+      } else {
+        error = e.toString();
+      }
+    }
 
     if (api.token != null) {
       try {
         profile = await api.me();
         await refresh();
-      } catch (_) {
-        await logout();
+      } catch (e) {
+        if (e is ApiException && e.statusCode == 401) {
+          await logout();
+        } else {
+          error = e.toString();
+        }
       }
     }
 
@@ -67,7 +97,8 @@ class AppState extends ChangeNotifier {
   Future<void> _storeToken(String token) async {
     api.token = token;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('access_token', token);
+    // New credentials are persisted by ApiService in platform secure storage.
+    await prefs.remove('access_token');
   }
 
   Future<void> login(String email, String password) async {
@@ -75,7 +106,7 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final token = await api.login(email, password);
+      final token = await api.loginMobile(email, password);
       await _storeToken(token);
       profile = await api.me();
       await refresh();
@@ -98,7 +129,8 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final token = await api.register(email, password, firstName, lastName);
+      final token =
+          await api.registerMobile(email, password, firstName, lastName);
       await _storeToken(token);
       profile = await api.me();
       await refresh();
@@ -113,6 +145,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> logout() async {
     _sessionRevision++;
+    await api.logoutSession();
     api.token = null;
     profile = null;
     devices = [];
@@ -129,21 +162,27 @@ class AppState extends ChangeNotifier {
   Future<void> refresh() async {
     if (!authenticated) return;
     final revision = _sessionRevision;
-    final loadedDevices = await api.getDevices();
-    if (revision != _sessionRevision) return;
-    final loadedMusic = await api.getMusic();
-    if (revision != _sessionRevision) return;
-    final loadedHomes = await api.getHomes();
-    if (revision != _sessionRevision) return;
-    final loadedRooms = <LilyRoom>[];
-    for (final home in loadedHomes) {
-      loadedRooms.addAll(await api.getRooms(home.id));
+    try {
+      final loadedDevices = await api.getDevices();
       if (revision != _sessionRevision) return;
+      final loadedMusic = await api.getMusic();
+      if (revision != _sessionRevision) return;
+      final loadedHomes = await api.getHomes();
+      if (revision != _sessionRevision) return;
+      final loadedRooms = <LilyRoom>[];
+      for (final home in loadedHomes) {
+        loadedRooms.addAll(await api.getRooms(home.id));
+        if (revision != _sessionRevision) return;
+      }
+      devices = loadedDevices;
+      music = loadedMusic;
+      homes = loadedHomes;
+      rooms = loadedRooms;
+      notifyListeners();
+    } catch (e) {
+      if (revision != _sessionRevision) return;
+      if (e is ApiException && e.statusCode == 401) await logout();
+      rethrow;
     }
-    devices = loadedDevices;
-    music = loadedMusic;
-    homes = loadedHomes;
-    rooms = loadedRooms;
-    notifyListeners();
   }
 }

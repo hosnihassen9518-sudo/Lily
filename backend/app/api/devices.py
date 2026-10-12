@@ -23,6 +23,7 @@ from app.schemas.device import (
 from app.services.mqtt_service import mqtt_service
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+from app.api.device_operations import locked_device, current_identity
 
 
 def ensure_smart_profile(db: Session, device: Device, user_id: int):
@@ -46,7 +47,9 @@ def ensure_smart_profile(db: Session, device: Device, user_id: int):
     return profile
 
 def serialize_device(device: Device, db: Session | None = None):
-    if device.lifecycle_status == "DISABLED":
+    if device.lifecycle_status == "RESET_PENDING":
+        display_status = "RESET_PENDING"
+    elif device.lifecycle_status == "DISABLED":
         display_status = "DISABLED"
     elif device.owner_id is None:
         display_status = "INVENTORY"
@@ -143,12 +146,14 @@ def rename_device(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
     if not device or device.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Device not found")
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=422, detail="Device name cannot be empty")
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     device.name = name
     db.commit()
     db.refresh(device)
@@ -164,7 +169,7 @@ def claim_device(
     device = db.scalar(
         select(Device).where(
             Device.serial_number == payload.serial_number
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )
 
     if not device:
@@ -173,6 +178,10 @@ def claim_device(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_cleanup_complete
+    require_cleanup_complete(db,device)
+    if device.lifecycle_status == "RESET_PENDING":
+        raise HTTPException(409, "Device reset pending")
     if device.lifecycle_status == "DISABLED":
         raise HTTPException(
             status_code=403,
@@ -184,6 +193,11 @@ def claim_device(
             status_code=409,
             detail="Device already assigned",
         )
+
+    from app.models.device_lifecycle import DeviceIdentity
+    identity=current_identity(db,device.id)
+    if device.owner_id is None and identity and identity.receipt_public_key:
+        raise HTTPException(409,'Use Bluetooth provisioning to claim this managed device.')
 
     device.owner_id = user.id
     device.name = payload.name or device.name
@@ -205,7 +219,7 @@ def activate_device(
     device = db.scalar(
         select(Device).where(
             Device.serial_number == payload.serial_number
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )
 
     if not device or not verify_password(
@@ -217,6 +231,10 @@ def activate_device(
             detail="Invalid device credentials",
         )
 
+    from app.api.device_operations import require_cleanup_complete
+    require_cleanup_complete(db,device)
+    if device.lifecycle_status == "RESET_PENDING":
+        raise HTTPException(409, "Device reset pending")
     if device.lifecycle_status == "DISABLED":
         raise HTTPException(
             status_code=403,
@@ -247,6 +265,10 @@ def activate_device(
             detail="Pairing user not found",
         )
 
+    if device.owner_id is None:
+        from app.models.device_lifecycle import DeviceIdentity
+        identity=current_identity(db,device.id)
+        if identity: identity.generation += 1
     device.owner_id = pairing_user_id
     device.lifecycle_status = "ACTIVE"
     device.firmware_version = (
@@ -257,15 +279,24 @@ def activate_device(
     if not device.activated_at:
         device.activated_at = datetime.now(timezone.utc)
 
+    factory_profile=db.get(DeviceProfile,device.id)
+    factory_type=factory_profile.device_type_id if factory_profile else None
     profile = ensure_smart_profile(db, device, pairing_user_id)
     if payload.device_type_key:
         requested_type = db.scalar(select(DeviceType).where(DeviceType.key == payload.device_type_key))
+        if not requested_type:
+            raise HTTPException(422, 'Unknown device type')
+        if factory_type and factory_type != requested_type.id:
+            raise HTTPException(409, 'Firmware type does not match factory inventory')
         if requested_type:
             profile.device_type_id = requested_type.id
     db.commit()
     db.refresh(device)
 
+    from app.models.device_lifecycle import DeviceIdentity
+    identity=current_identity(db,device.id)
     return {
+        "generation": identity.generation if identity else 0,
         "id": device.id,
         "serial_number": device.serial_number,
         "owner_id": device.owner_id,
@@ -289,7 +320,7 @@ def set_light(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -297,21 +328,24 @@ def set_light(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     device.light_on = payload.enabled
     device.brightness = payload.brightness
     device.color_r = payload.r
     device.color_g = payload.g
     device.color_b = payload.b
-    db.commit()
-
+    from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
         {
             "type": "light",
             "payload": payload.model_dump(),
         },
+        generation=device_generation(db,device),
     )
 
+    db.commit()
     return {
         "device": serialize_device(device, db),
         "mqtt_published": delivered,
@@ -323,7 +357,7 @@ def audio_play(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -331,11 +365,16 @@ def audio_play(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
+    from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
         {"type": "audio_play"},
+        generation=device_generation(db,device),
     )
 
+    db.commit()
     return {"ok": True, "mqtt_published": delivered}
 
 @router.post("/{device_id}/audio/stop")
@@ -344,7 +383,7 @@ def audio_stop(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -352,11 +391,16 @@ def audio_stop(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
+    from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
         {"type": "audio_stop"},
+        generation=device_generation(db,device),
     )
 
+    db.commit()
     return {"ok": True, "mqtt_published": delivered}
 
 @router.put("/{device_id}/audio/volume")
@@ -366,7 +410,7 @@ def set_volume(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
 
     if not device or device.owner_id != user.id:
         raise HTTPException(
@@ -374,17 +418,20 @@ def set_volume(
             detail="Device not found",
         )
 
+    from app.api.device_operations import require_mutable
+    require_mutable(device)
     device.volume = payload.volume
-    db.commit()
-
+    from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
         {
             "type": "volume",
             "payload": {"volume": payload.volume},
         },
+        generation=device_generation(db,device),
     )
 
+    db.commit()
     return {
         "ok": True,
         "mqtt_published": delivered,
@@ -399,7 +446,7 @@ def admin_create_device(
     existing = db.scalar(
         select(Device).where(
             Device.serial_number == payload.serial_number
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )
 
     if existing:
@@ -441,9 +488,12 @@ def admin_set_device_disabled(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+
+    if device.lifecycle_status == "RESET_PENDING":
+        raise HTTPException(409,"Finish the device reset before changing inventory state")
 
     device.lifecycle_status = "DISABLED" if payload.disabled else "ACTIVE"
     if payload.disabled:
@@ -459,10 +509,19 @@ def admin_delete_device(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    device = db.get(Device, device_id)
+    device = locked_device(db,device_id=device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
+    if device.lifecycle_status == "RESET_PENDING":
+        raise HTTPException(409,"Finish the device reset before changing inventory state")
+
+    from sqlalchemy import delete
+    from app.models.device_lifecycle import DeviceIdentity, DeviceOperation
+    from app.models.smart_device import DeviceTelemetry
+    from app.models.schedule import Schedule
+    for model in (Schedule,DeviceProfile,DeviceState,DeviceTelemetry,DeviceIdentity,DeviceOperation):
+        db.execute(delete(model).where(model.device_id==device.id))
     db.delete(device)
     db.commit()
     return {"ok": True}

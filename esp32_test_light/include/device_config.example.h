@@ -21,3 +21,7 @@
 // GPIO18 -> 330 ohm resistor -> LED anode (+)
 // LED cathode (-) -> GND
 #define LED_PIN             18
+
+// For 0.8.0 management, prefer the admin-generated device_config.h.
+// Legacy boards: export device_public_key.h from the server signing key,
+// and include it here; never put the server private key on a device.
