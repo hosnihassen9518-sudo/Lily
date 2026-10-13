@@ -73,7 +73,7 @@ def test_schedule_and_widget_deny_empty_model(client, db, owner):
     device.is_online = True; db.commit()
     assert projection(db, device)['can_control'] is False
     response=client.post(f'/api/v1/schedules/device/{device.id}',headers=owner[1],json={
-        'name':'Denied','time_of_day':'09:00','action':{'light':{'enabled':True}}})
+        'name':'Denied','time_of_day':'09:00','days_of_week':[0],'action':{'light':{'enabled':True}}})
     assert response.status_code == 403
 
 
@@ -98,7 +98,7 @@ def test_schedule_revalidates_after_feature_removal(client, db, owner, monkeypat
     sent=[]
     monkeypatch.setattr(mqtt_service,'publish_schedule',lambda serial, payload, **kw: sent.append(payload) or True)
     response=client.post(f'/api/v1/schedules/device/{device.id}',headers=owner[1],json={
-        'name':'Morning','time_of_day':'09:00','action':{'light':{'enabled':True}}})
+        'name':'Morning','time_of_day':'09:00','days_of_week':[0],'action':{'light':{'enabled':True}}})
     assert response.status_code == 200
     assert sent[-1]['schedules'][0]['action']['light']['brightness'] == 41
     model.capabilities=[]; db.commit()
@@ -113,9 +113,9 @@ def test_reviewed_schedule_and_music_contracts(client, db, owner, admin, monkeyp
     monkeypatch.setattr(mqtt_service,'publish_schedule',lambda serial, payload, **kw: sent.append(payload) or True)
     base=f'/api/v1/schedules/device/{device.id}'
     mixed={'type':'light','payload':{'enabled':True},'audio':'play','volume':100}
-    assert client.post(base,headers=owner[1],json={'name':'Mixed','time_of_day':'09:00','action':mixed}).status_code==422
+    assert client.post(base,headers=owner[1],json={'name':'Mixed','time_of_day':'09:00','days_of_week':[0],'action':mixed}).status_code==422
     typed={'type':'light','payload':{'enabled':True}}
-    assert client.post(base,headers=owner[1],json={'name':'Typed','time_of_day':'09:00','action':typed}).status_code==200
+    assert client.post(base,headers=owner[1],json={'name':'Typed','time_of_day':'09:00','days_of_week':[0],'action':typed}).status_code==200
     assert sent[-1]['schedules'][0]['action']['light']['enabled'] is True
     assert 'type' not in sent[-1]['schedules'][0]['action']
     state=f'/api/v1/devices/{device.id}/state'

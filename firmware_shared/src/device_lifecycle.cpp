@@ -26,6 +26,9 @@ bool bluetoothReady = false;
 unsigned long lastPoll = 0;
 int rng(void*, unsigned char* bytes, size_t count) { esp_fill_random(bytes, count); return 0; }
 String receiptKey() {
+  // A provisioned factory key must match the identity registered by inventory.
+  // Generated NVS keys are only for boards without a factory receipt key.
+  if(strlen(DEVICE_RECEIPT_PRIVATE_KEY)>0) return String(DEVICE_RECEIPT_PRIVATE_KEY);
   String key=storage.getString("receipt-key", "");
   if(!key.isEmpty()) return key;
   if(strlen(DEVICE_RECEIPT_PRIVATE_KEY)>0) key=DEVICE_RECEIPT_PRIVATE_KEY;
@@ -74,7 +77,15 @@ bool post(const char* path,JsonDocument& request,JsonDocument& response) {
   String body;serializeJson(request,body);
   int code=http.POST(body);String result=http.getString();http.end();
   body="";
-  return code>=200 && code<300 && !deserializeJson(response,result);
+  if (code < 200 || code >= 300) {
+    Serial.printf("Lily runtime %s failed: HTTP %d\n", path, code);
+    return false;
+  }
+  if (deserializeJson(response,result)) {
+    Serial.printf("Lily runtime %s failed: invalid JSON response\n", path);
+    return false;
+  }
+  return true;
 }
 void credentials(JsonDocument& doc) {doc["serial_number"]=DEVICE_SERIAL;doc["device_secret"]=DEVICE_SECRET;}
 bool verifyEnvelope(const String& raw,const String& expectedKind,const String& expectedChallenge,JsonDocument& operation) {
@@ -206,7 +217,11 @@ void pollDeviceLifecycle() {
   lastPoll=millis();
   JsonDocument registration,response;credentials(registration);
   registration["receipt_public_key"]=publicKey();registration["protocol_version"]=1;
-  if(!deviceManagementSupported() || !post("/device-runtime/register",registration,response)){ready=false;return;}
+  if (!deviceManagementSupported()) {
+    Serial.println("Lily runtime blocked: missing DEVICE_SERVER_PUBLIC_KEY. Download the matching device configuration from the portal.");
+    ready=false;return;
+  }
+  if(!post("/device-runtime/register",registration,response)){ready=false;return;}
   setDeviceGeneration(response["generation"]|deviceGeneration());
   JsonDocument request,operations;credentials(request);
   if(!post("/device-runtime/operations",request,operations)){ready=false;return;}
@@ -214,5 +229,8 @@ void pollDeviceLifecycle() {
     String envelope;serializeJson(operations["authorization"],envelope);
     requestUserReset(envelope,"remote");ready=false;return;
   }
+  const bool wasReady = ready;
   ready=operations["lifecycle_status"]=="ACTIVE";
+  if (ready && !wasReady) Serial.println("Lily runtime ready; MQTT enabled");
+  if (!ready) Serial.printf("Lily runtime waiting: lifecycle=%s\n", operations["lifecycle_status"] | "unknown");
 }
