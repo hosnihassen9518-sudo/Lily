@@ -25,3 +25,13 @@ Runner's default Keychain group remains private; only `.widgets` is shared with 
 - Suspend network/background refresh and verify retry preserves login. Displayed device status is the last reported snapshot and may be stale until refreshed.
 
 Android builds use the existing sideload signing configuration. Production store signing and physical phone acceptance remain separate release checks.
+
+## V6 appearance and GitHub APK builds
+
+The mobile home screen follows the supplied V6 reference: smiling-cloud app bar, “A little everyday magic” banner, illustrated two-column device cards and pale-blue power controls. Home configuration stays in the app bar so extra actions do not squeeze “My devices”. The application-level theme regression exercises the real LilyApp at 320 and 390 logical pixels.
+
+The restored UI is on `feat/device-home-widget` (PR #2); until merged, building `main` uses its older UI. Build the feature branch to get the restored theme together with the session and widget features.
+
+Version 0.9.1+8 identifies the new build. GitHub Actions → **Lily Android APK** tests the app, builds it, checks version/signature and uploads **LilyV10.apk** with package metadata and SHA-256. Download the artifact from the successful run for the current commit and install the APK as an update. Keep the existing sideload signing identity if building elsewhere; do not uninstall Lily to update, because uninstalling removes its saved local session.
+
+Before the first GitHub APK build, add the **existing** Android sideload `debug.keystore` (base64 encoded) as the repository Actions secret `LILY_ANDROID_DEBUG_KEYSTORE_BASE64`. The workflow fails clearly if it is absent instead of producing an incompatible update with a new key. Do not commit the keystore or post its contents in an issue. The current Gradle release configuration uses the standard debug alias/password; store-release signing remains a separate setup.

@@ -1,7 +1,7 @@
 name: lily_mobile
 description: Lily RGB/audio device companion application.
 publish_to: "none"
-version: 0.9.0+7
+version: 0.9.1+8
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

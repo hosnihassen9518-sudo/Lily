@@ -633,26 +633,26 @@
 		};
 		E5656BE3CAB4C1CAE933D78E /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
  APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
- CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 8;
  GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
  LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
- MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ MARKETING_VERSION = 0.9.1; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
  SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
  }; name = Debug; };
 		0BE185FA6CC2B83BCD6E5BEF /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
  APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
- CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 8;
  GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
  LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
- MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ MARKETING_VERSION = 0.9.1; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
  SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
  }; name = Release; };
 		4937C975046794BF9B891649 /* Profile */ = {isa = XCBuildConfiguration; buildSettings = {
  APPLICATION_EXTENSION_API_ONLY = YES; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic;
- CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 7;
+ CODE_SIGN_ENTITLEMENTS = LilyWidget/LilyWidget.entitlements; CURRENT_PROJECT_VERSION = 8;
  GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = LilyWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0;
  LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
- MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
+ MARKETING_VERSION = 0.9.1; PRODUCT_BUNDLE_IDENTIFIER = com.example.lilyMobile.LilyWidget; PRODUCT_NAME = "$(TARGET_NAME)";
  SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
  }; name = Profile; };
 /* End XCBuildConfiguration section */

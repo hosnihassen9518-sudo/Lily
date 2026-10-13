@@ -1,0 +1,74 @@
+name: Lily Android APK
+
+on:
+  push:
+    branches: [feat/device-home-widget, main]
+    paths:
+      - 'mobile_app/**'
+      - '.github/workflows/lily-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lily-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Android SDK and accept licenses
+        working-directory: .
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Test application, sessions and V6 theme
+        run: flutter test
+      - name: Restore existing sideload signing identity
+        env:
+          LILY_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.LILY_ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$LILY_ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            echo "::error::Add the existing Android debug.keystore as LILY_ANDROID_DEBUG_KEYSTORE_BASE64 in repository Actions secrets. A new signing identity cannot update installed Lily."
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$LILY_ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+      - name: Build release APK
+        run: flutter build apk --release
+      - name: Verify and name APK
+        run: |
+          mkdir -p build/app/outputs/lily
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/lily/LilyV10.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify build/app/outputs/lily/LilyV10.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/app/outputs/lily/LilyV10.apk > build/app/outputs/lily/package-info.txt
+          grep "versionCode='8' versionName='0.9.1'" build/app/outputs/lily/package-info.txt
+          grep "application-label:'Lily'" build/app/outputs/lily/package-info.txt
+          cd build/app/outputs/lily
+          sha256sum LilyV10.apk > SHA256SUMS
+      - name: Publish downloadable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LilyV10-${{ github.sha }}
+          path: mobile_app/build/app/outputs/lily/
+          if-no-files-found: error
+          retention-days: 30
