@@ -28,6 +28,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: android-actions/setup-android@v3
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -35,7 +36,6 @@ jobs:
       - name: Install Android SDK and accept licenses
         working-directory: .
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Install Flutter dependencies
         run: flutter pub get
