@@ -452,9 +452,7 @@ void connectStoredWifi() {
     Serial.println(WiFi.localIP());
 
     // Europe/Paris with automatic CET/CEST daylight-saving transitions.
-    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-    tzset();
-    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");
   }
 }
 
@@ -573,8 +571,7 @@ void executeSchedulesIfDue() {
 }
 
 void initializeScheduleClock() {
-  setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1);tzset();
-  configTime(0,0,"pool.ntp.org","time.google.com");
+  configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");
 }
 
 bool provisionWifi(const BleWifiRequest& request,String& detail,bool keepAp) {

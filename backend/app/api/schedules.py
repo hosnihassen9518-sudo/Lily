@@ -121,7 +121,9 @@ def create_schedule(
 
     db.add(schedule)
     db.flush()
-    sync_device_schedule(db, device)
+    from app.services.feature_schedule_sync import mark_pending, flush_pending
+    mark_pending(db, device)
+    flush_pending(db, device)
     db.commit()
     db.refresh(schedule)
 
@@ -157,7 +159,33 @@ def delete_schedule(
         raise HTTPException(404,"Device not found")
     db.delete(schedule)
     db.flush()
-    sync_device_schedule(db, device)
+    from app.services.feature_schedule_sync import mark_pending, flush_pending
+    mark_pending(db, device)
+    flush_pending(db, device)
     db.commit()
 
     return {"ok": True}
+
+
+@router.patch("/{schedule_id}")
+def update_schedule(schedule_id: int, payload: ScheduleCreate,
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.api.device_operations import locked_device, require_mutable
+    schedule = db.get(Schedule, schedule_id)
+    if not schedule or schedule.user_id != user.id:
+        raise HTTPException(404, "Schedule not found")
+    device = locked_device(db, device_id=schedule.device_id)
+    if not device or device.owner_id != user.id:
+        raise HTTPException(404, "Device not found")
+    require_mutable(device)
+    schedule_action(db, device, payload.action)
+    for key, value in payload.model_dump().items():
+        setattr(schedule, key, value)
+    db.flush()
+    from app.services.feature_schedule_sync import mark_pending, flush_pending
+    mark_pending(db, device)
+    flush_pending(db, device)
+    db.commit()
+    db.refresh(schedule)
+    return {"id": schedule.id, "name": schedule.name, "time_of_day": schedule.time_of_day,
+            "days_of_week": schedule.days_of_week, "action": schedule.action, "enabled": schedule.enabled}

@@ -36,6 +36,7 @@ void main() {
       await tester.tap(find.text('Schedule'));
       await tester.pumpAndSettle();
       expect(find.text('Play audio'), findsOneWidget);
+      await tester.ensureVisible(find.text('Play audio'));
       await tester.tap(find.text('Play audio'));
       state.devices = removed
           ? []

@@ -4,6 +4,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <time.h>
 
 #include "device_config.h"
 #include "device_lifecycle.h"
@@ -11,6 +12,7 @@
 #include "wifi_transaction.h"
 #include "ble_provisioning.h"
 
+static const char* SCHEDULES_PATH = "/schedules.json";
 static const char* CONFIG_PATH = "/wifi.json";
 
 class BoundedWifiClient : public WiFiClient {
@@ -30,6 +32,7 @@ String homePassword;
 String pairingToken;
 bool lightEnabled = false;
 unsigned long lastHeartbeat = 0;
+unsigned long lastScheduleCheck = 0;
 unsigned long lastReconnectAttempt = 0;
 
 String topic(const char* suffix) {
@@ -170,7 +173,7 @@ void handleCommand(const JsonDocument& doc) {
 }
 
 void mqttCallback(char* rawTopic, byte* payload, unsigned int length) {
-  if (String(rawTopic) != topic("command")) return;
+  if (String(rawTopic) != topic("command") && String(rawTopic) != topic("schedule")) return;
 
   String incoming;
   incoming.reserve(length);
@@ -178,6 +181,18 @@ void mqttCallback(char* rawTopic, byte* payload, unsigned int length) {
 
   JsonDocument doc;
   if (!deserializeJson(doc, incoming) && acceptDeviceMessage(deviceRuntimeReady(),deviceManagementSupported(),deviceGeneration(),doc["generation"].is<int>() ? doc["generation"].as<int>() : -1)) {
+    if (String(rawTopic) == topic("schedule")) {
+      if (!doc["schedules"].is<JsonArray>()) return;
+      File file = LittleFS.open("/schedules.tmp", "w");
+      if (!file) return;
+      const size_t expected = measureJson(doc);
+      const size_t written = serializeJson(doc, file); file.flush();
+      const bool complete = written == expected && file.size() == expected; file.close();
+      if (complete) LittleFS.rename("/schedules.tmp", SCHEDULES_PATH);
+      else LittleFS.remove("/schedules.tmp");
+      Serial.println("Schedules received");
+      return;
+    }
     Serial.println("MQTT command received");
     handleCommand(doc);
   }
@@ -187,7 +202,7 @@ bool connectMqtt() {
   if(!deviceRuntimeReady())return false;
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
-  mqtt.setBufferSize(2048);
+  mqtt.setBufferSize(4096);
   mqtt.setSocketTimeout(2);
 
   const String clientId = "lily-" + String(DEVICE_SERIAL);
@@ -209,11 +224,102 @@ bool connectMqtt() {
   }
 
   mqtt.subscribe(topic("command").c_str(), 1);
+  mqtt.subscribe(topic("schedule").c_str(), 1);
   mqtt.publish(statusTopic.c_str(), online.c_str(), true);
   publishState();
   publishHeartbeat();
   Serial.println("MQTT connected");
   return true;
+}
+
+String executedMinuteKey = "";
+String executedScheduleIds = "";
+
+void applyScheduleAction(JsonObjectConst action) {
+  if (!action["light"]["enabled"].is<bool>()) return;
+  lightEnabled = action["light"]["enabled"].as<bool>();
+  applyLight(); publishState();
+  Serial.println("Scheduled light action executed");
+}
+
+bool scheduleContainsToday(JsonArrayConst days, int mondayBasedDay) {
+  for (JsonVariantConst day : days) {
+    if (day.as<int>() == mondayBasedDay) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void executeSchedulesIfDue() {
+  if (!deviceRuntimeReady() || !LittleFS.exists(SCHEDULES_PATH)) return;
+
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 50)) return;
+
+  // Backend uses Monday=0 ... Sunday=6.
+  int mondayBasedDay = (timeinfo.tm_wday + 6) % 7;
+
+  char currentTime[6];
+  snprintf(
+      currentTime,
+      sizeof(currentTime),
+      "%02d:%02d",
+      timeinfo.tm_hour,
+      timeinfo.tm_min);
+
+  char minuteKey[20];
+  snprintf(
+      minuteKey,
+      sizeof(minuteKey),
+      "%04d-%02d-%02d %02d:%02d",
+      timeinfo.tm_year + 1900,
+      timeinfo.tm_mon + 1,
+      timeinfo.tm_mday,
+      timeinfo.tm_hour,
+      timeinfo.tm_min);
+
+  if (executedMinuteKey != minuteKey) {
+    executedMinuteKey = minuteKey;
+    executedScheduleIds = "";
+  }
+
+  File file = LittleFS.open(SCHEDULES_PATH, "r");
+  if (!file) return;
+
+  JsonDocument doc;
+  auto error = deserializeJson(doc, file);
+  file.close();
+
+  if (error || !acceptDeviceMessage(deviceRuntimeReady(),deviceManagementSupported(),deviceGeneration(),doc["generation"].is<int>() ? doc["generation"].as<int>() : -1)) return;
+
+  JsonArrayConst schedules = doc["schedules"].as<JsonArrayConst>();
+
+  for (JsonObjectConst schedule : schedules) {
+    int scheduleId = schedule["id"] | -1;
+    String scheduledTime = schedule["time"] | "";
+
+    if (scheduledTime.length() >= 5) {
+      scheduledTime = scheduledTime.substring(0, 5);
+    }
+
+    JsonArrayConst days = schedule["days"].as<JsonArrayConst>();
+
+    if (scheduledTime != currentTime) continue;
+    if (!scheduleContainsToday(days, mondayBasedDay)) continue;
+
+    String marker = "|" + String(scheduleId) + "|";
+    if (executedScheduleIds.indexOf(marker) >= 0) continue;
+
+    JsonObjectConst action = schedule["action"].as<JsonObjectConst>();
+    applyScheduleAction(action);
+
+    executedScheduleIds += marker;
+  }
+}
+
+void initializeScheduleClock() {
+  configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");
 }
 
 bool provisionOverBle(const BleWifiRequest& request, String& detail) {
@@ -236,6 +342,7 @@ bool provisionOverBle(const BleWifiRequest& request, String& detail) {
     pairingToken = "";
     if (activated) {
       if (saveConfig(request.ssid, request.password)) {
+        initializeScheduleClock();
         homeSsid = request.ssid;
         homePassword = request.password;
         Serial.printf("Lily Wi-Fi connected: %s\n", WiFi.localIP().toString().c_str());
@@ -286,7 +393,7 @@ void setup() {
   if (!LittleFS.begin(true)) Serial.println("LittleFS mount failed");
   beginDeviceLifecycle([](){
     lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
-    const char* files[]={"/wifi.json","/wifi.tmp"};
+    const char* files[]={"/wifi.json","/wifi.tmp",SCHEDULES_PATH,"/schedules.tmp"};
     for(auto path:files)if(LittleFS.exists(path) && !LittleFS.remove(path))return false;
     return true;
   });
@@ -294,6 +401,7 @@ void setup() {
 
   WiFi.mode(WIFI_OFF);
   connectStoredWifi();
+  initializeScheduleClock();
   if(WiFi.status()!=WL_CONNECTED){WiFi.disconnect(false,false);WiFi.mode(WIFI_OFF);}
   beginBleProvisioning(!homeSsid.isEmpty(), provisionOverBle);
   // Saved Wi-Fi runs normally; new credentials are received over BLE.
@@ -311,6 +419,9 @@ void loop() {
     }
 
     if(deviceRuntimeReady())mqtt.loop();
+    if (millis() - lastScheduleCheck >= 1000) {
+      lastScheduleCheck = millis(); executeSchedulesIfDue();
+    }
 
     if (millis() - lastHeartbeat > 30000) {
       lastHeartbeat = millis();

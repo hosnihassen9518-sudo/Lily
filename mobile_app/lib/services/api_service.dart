@@ -439,6 +439,10 @@ class ApiService {
     );
   }
 
+  Future<void> updateSchedule(int id, Map<String, dynamic> schedule) async {
+    await _jsonRequest('/schedules/$id', method: 'PATCH', body: schedule);
+  }
+
   Future<void> deleteSchedule(int scheduleId) async {
     await _jsonRequest('/schedules/$scheduleId', method: 'DELETE');
   }

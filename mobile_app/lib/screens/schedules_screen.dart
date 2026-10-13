@@ -14,6 +14,60 @@ class SchedulesScreen extends StatefulWidget {
 class _SchedulesScreenState extends State<SchedulesScreen> {
   List<Map<String, dynamic>> schedules = [];
   bool loading = true;
+  String? error;
+  static const dayNames = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday'
+  ];
+  Map<String, dynamic> normalizeAction(Map<String, dynamic> action) {
+    final payload = Map<String, dynamic>.from(action['payload'] ?? {});
+    switch (action['type']) {
+      case 'light':
+        return {'light': payload};
+      case 'audio_play':
+        return {'audio': 'play'};
+      case 'audio_stop':
+        return {'audio': 'stop'};
+      case 'volume':
+        return {'volume': payload['volume']};
+      default:
+        return action;
+    }
+  }
+
+  String daysText(List days) {
+    final sorted = days.cast<int>().toSet().toList()..sort();
+    if (sorted.length == 7) return 'Every day';
+    if (sorted.join(',') == '0,1,2,3,4') return 'Weekdays';
+    if (sorted.join(',') == '5,6') return 'Weekends';
+    return sorted
+        .where((d) => d >= 0 && d < 7)
+        .map((d) => dayNames[d])
+        .join(', ');
+  }
+
+  String timeText(dynamic value) {
+    final parts = value.toString().split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]))
+        .format(context);
+  }
+
+  Future<void> change(Future<void> Function() action) async {
+    try {
+      await action();
+      if (mounted) await load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Could not save schedule. Please try again.')));
+      }
+    }
+  }
 
   Device? currentDevice(AppState state) {
     for (final device in state.devices) {
@@ -28,9 +82,12 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   Future<void> load() async {
     if (!mounted || currentDevice(context.read<AppState>()) == null) return;
     setState(() => loading = true);
+    error = null;
     try {
       schedules =
           await context.read<AppState>().api.getSchedules(widget.device.id);
+    } catch (e) {
+      error = 'Could not load schedules. Pull to refresh.';
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -42,13 +99,22 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
     Future.microtask(load);
   }
 
-  Future<void> addSchedule() async {
+  Future<void> addSchedule([Map<String, dynamic>? existing]) async {
     if (!canSchedule(currentDevice(context.read<AppState>()))) return;
-    final name = TextEditingController(text: 'Evening');
-    TimeOfDay time = const TimeOfDay(hour: 20, minute: 0);
-    final selectedDays = <int>{0, 1, 2, 3, 4, 5, 6};
-    bool lightOn = true;
-    bool audioPlay = false;
+    String name = existing?['name'] ?? 'Evening';
+    final parts = (existing?['time_of_day'] ?? '20:00').toString().split(':');
+    TimeOfDay time =
+        TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+    final selectedDays =
+        ((existing?['days_of_week'] as List?) ?? [0, 1, 2, 3, 4, 5, 6])
+            .cast<int>()
+            .toSet();
+    final originalAction =
+        normalizeAction(Map<String, dynamic>.from(existing?['action'] ?? {}));
+    bool includeLight = existing == null || originalAction.containsKey('light');
+    bool includeAudio = existing == null || originalAction.containsKey('audio');
+    bool lightOn = originalAction['light']?['enabled'] ?? true;
+    bool audioPlay = originalAction['audio'] == 'play';
 
     final ok = await showDialog<bool>(
       context: context,
@@ -57,7 +123,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
           builder: (context, setDialogState) {
             final device = currentDevice(state);
             return AlertDialog(
-              title: const Text('New schedule'),
+              title: Text(existing == null ? 'New schedule' : 'Edit schedule'),
               content: SizedBox(
                 width: 420,
                 child: SingleChildScrollView(
@@ -65,8 +131,9 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (device == null) const Text('Device not found'),
-                      TextField(
-                        controller: name,
+                      TextFormField(
+                        initialValue: name,
+                        onChanged: (value) => name = value,
                         decoration: const InputDecoration(labelText: 'Name'),
                       ),
                       const SizedBox(height: 12),
@@ -83,6 +150,26 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                           }
                         },
                       ),
+                      const Text('Repeat on'),
+                      const Text('Paris time · adjusts for daylight saving',
+                          style: TextStyle(fontSize: 12)),
+                      Wrap(spacing: 6, children: [
+                        for (final preset in [
+                          'Every day',
+                          'Weekdays',
+                          'Weekends'
+                        ])
+                          ActionChip(
+                              label: Text(preset),
+                              onPressed: () => setDialogState(() {
+                                    selectedDays.clear();
+                                    selectedDays.addAll(preset == 'Every day'
+                                        ? [0, 1, 2, 3, 4, 5, 6]
+                                        : preset == 'Weekdays'
+                                            ? [0, 1, 2, 3, 4]
+                                            : [5, 6]);
+                                  })),
+                      ]),
                       Wrap(
                         spacing: 6,
                         children: List.generate(7, (day) {
@@ -109,12 +196,24 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                         }),
                       ),
                       if (device?.supportsLight == true)
+                        CheckboxListTile(
+                            value: includeLight,
+                            onChanged: (v) =>
+                                setDialogState(() => includeLight = v ?? false),
+                            title: const Text('Change light')),
+                      if (device?.supportsLight == true && includeLight)
                         SwitchListTile(
                           value: lightOn,
                           onChanged: (v) => setDialogState(() => lightOn = v),
                           title: const Text('Turn light on'),
                         ),
                       if (device?.supportsAudio == true)
+                        CheckboxListTile(
+                            value: includeAudio,
+                            onChanged: (v) =>
+                                setDialogState(() => includeAudio = v ?? false),
+                            title: const Text('Change audio')),
+                      if (device?.supportsAudio == true && includeAudio)
                         SwitchListTile(
                           value: audioPlay,
                           onChanged: (v) => setDialogState(() => audioPlay = v),
@@ -130,7 +229,12 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: canSchedule(device)
+                  onPressed: canSchedule(device) &&
+                          selectedDays.isNotEmpty &&
+                          ((includeLight && device?.supportsLight == true) ||
+                              (includeAudio && device?.supportsAudio == true) ||
+                              (device?.hasCapability('volume') == true &&
+                                  originalAction.containsKey('volume')))
                       ? () => Navigator.pop(context, true)
                       : null,
                   child: const Text('Save'),
@@ -142,25 +246,50 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
       ),
     );
 
-    if (ok != true || !mounted) return;
+    if (ok != true || !mounted) {
+      return;
+    }
     final device = currentDevice(context.read<AppState>());
     if (!canSchedule(device)) return;
 
     final hh = time.hour.toString().padLeft(2, '0');
     final mm = time.minute.toString().padLeft(2, '0');
 
-    await context.read<AppState>().api.createSchedule(
-      deviceId: widget.device.id,
-      name: name.text.trim().isEmpty ? 'Schedule' : name.text.trim(),
-      time: '$hh:$mm:00',
-      days: selectedDays.toList(),
-      action: {
-        if (device?.supportsLight == true) 'light': {'enabled': lightOn},
-        if (device?.supportsAudio == true) 'audio': audioPlay ? 'play' : 'stop',
-      },
-    );
-
-    if (mounted) await load();
+    final action = <String, dynamic>{
+      if (device?.supportsLight == true && includeLight)
+        'light': {
+          for (final entry
+              in Map<String, dynamic>.from(originalAction['light'] ?? {})
+                  .entries)
+            if ((entry.key == 'brightness' &&
+                    device?.hasCapability('brightness') == true) ||
+                (['r', 'g', 'b'].contains(entry.key) &&
+                    device?.hasCapability('rgb') == true))
+              entry.key: entry.value,
+          'enabled': lightOn
+        },
+      if (device?.supportsAudio == true && includeAudio)
+        'audio': audioPlay ? 'play' : 'stop',
+      if (device?.hasCapability('volume') == true &&
+          originalAction.containsKey('volume'))
+        'volume': originalAction['volume'],
+    };
+    final api = context.read<AppState>().api;
+    final title = name.trim().isEmpty ? 'Schedule' : name.trim();
+    await change(() => existing == null
+        ? api.createSchedule(
+            deviceId: widget.device.id,
+            name: title,
+            time: '$hh:$mm:00',
+            days: selectedDays.toList()..sort(),
+            action: action)
+        : api.updateSchedule(existing['id'] as int, {
+            'name': title,
+            'time_of_day': '$hh:$mm:00',
+            'days_of_week': selectedDays.toList()..sort(),
+            'action': action,
+            'enabled': existing['enabled'] ?? true
+          }));
   }
 
   @override
@@ -176,42 +305,93 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
         title: const Text('Schedules'),
         actions: [
           IconButton(
-              onPressed: canSchedule(device) ? addSchedule : null,
+              onPressed: canSchedule(device) ? () => addSchedule() : null,
               icon: const Icon(Icons.add)),
         ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : schedules.isEmpty
-              ? const Center(child: Text('No schedules yet.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: schedules.length,
-                  itemBuilder: (context, index) {
-                    final schedule = schedules[index];
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.schedule),
-                        title: Text(schedule['name']?.toString() ?? 'Schedule'),
-                        subtitle: Text(
-                          '${schedule['time_of_day']} • ${schedule['days_of_week']}',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () async {
-                            await context
-                                .read<AppState>()
-                                .api
-                                .deleteSchedule(schedule['id'] as int);
-                            await load();
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
+          : error != null
+              ? Center(child: TextButton(onPressed: load, child: Text(error!)))
+              : schedules.isEmpty
+                  ? const Center(child: Text('No schedules yet.'))
+                  : RefreshIndicator(
+                      onRefresh: load,
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: schedules.length,
+                        itemBuilder: (context, index) {
+                          final schedule = schedules[index];
+                          return Card(
+                            child: ListTile(
+                              onTap: canSchedule(device)
+                                  ? () => addSchedule(schedule)
+                                  : null,
+                              leading: const Icon(Icons.schedule),
+                              title: Text(
+                                  schedule['name']?.toString() ?? 'Schedule'),
+                              subtitle: Text(
+                                '${timeText(schedule['time_of_day'])} · ${daysText(schedule['days_of_week'] as List)}\n${schedule['enabled'] == false ? 'Paused' : 'Active'} · Tap to edit',
+                              ),
+                              trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Switch(
+                                        value: schedule['enabled'] != false,
+                                        onChanged: canSchedule(device)
+                                            ? (enabled) => change(() => context
+                                                .read<AppState>()
+                                                .api
+                                                .updateSchedule(
+                                                    schedule['id'] as int,
+                                                    {...schedule}
+                                                      ..remove('id')
+                                                      ..['enabled'] = enabled))
+                                            : null),
+                                    IconButton(
+                                        icon: const Icon(Icons.delete_outline),
+                                        tooltip: 'Delete schedule',
+                                        onPressed: () async {
+                                          final confirmed = await showDialog<
+                                                  bool>(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                      title: const Text(
+                                                          'Delete schedule?'),
+                                                      content: Text(
+                                                          'Remove ${schedule['name']}?'),
+                                                      actions: [
+                                                        TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                    context,
+                                                                    false),
+                                                            child: const Text(
+                                                                'Cancel')),
+                                                        TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                    context,
+                                                                    true),
+                                                            child: const Text(
+                                                                'Delete'))
+                                                      ]));
+                                          if (confirmed == true && mounted) {
+                                            await change(() => context
+                                                .read<AppState>()
+                                                .api
+                                                .deleteSchedule(
+                                                    schedule['id'] as int));
+                                          }
+                                        }),
+                                  ]),
+                            ),
+                          );
+                        },
+                      )),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: canSchedule(device) ? addSchedule : null,
+        onPressed: canSchedule(device) ? () => addSchedule() : null,
         icon: const Icon(Icons.add),
         label: const Text('Schedule'),
       ),
