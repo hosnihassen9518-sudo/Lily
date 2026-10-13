@@ -200,7 +200,7 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
               child: Text(message)),
         if (!finished || !widget.wifi) ...[
           const Text(
-              'Keep the phone near Lily with Bluetooth enabled. Pair using the device PIN when prompted.'),
+              'Keep the phone near Lily with Bluetooth enabled. Confirm the Android pairing request if it appears.'),
           OutlinedButton(
               onPressed: busy ? null : () => run(scan),
               child: const Text('Find Lily over Bluetooth')),

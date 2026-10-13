@@ -81,6 +81,8 @@ void main() {
                         child: const Text('Home - add device')))))));
     await tester.tap(find.text('Home - add device'));
     await tester.pumpAndSettle();
+    expect(find.textContaining('without a code'), findsOneWidget);
+    expect(find.textContaining('pairing PIN'), findsNothing);
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
     expect(find.text('Wi-Fi networks seen by ESP32'), findsOneWidget);

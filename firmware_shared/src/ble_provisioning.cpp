@@ -5,7 +5,6 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLESecurity.h>
-#include <Preferences.h>
 #include <WiFi.h>
 #include <vector>
 #include <algorithm>
@@ -35,7 +34,6 @@ std::atomic<bool> advertiseAgain{false};
 bool discarding = false;
 bool enabled = false;
 unsigned long successAt = 0;
-uint32_t passkey;
 struct WifiNetwork { String ssid; int rssi; bool secure; };
 std::vector<WifiNetwork> scannedNetworks;
 String scanRequestId;
@@ -62,10 +60,10 @@ void publishNetworks(const String& id, int page) {
 }
 
 class SecurityCallbacks : public BLESecurityCallbacks {
-  uint32_t onPassKeyRequest() override { return passkey; }
-  void onPassKeyNotify(uint32_t key) override { Serial.printf("Lily BLE pairing PIN: %06lu\n", (unsigned long)key); }
+  uint32_t onPassKeyRequest() override { return 0; } // No passkey exchange with NoInputNoOutput.
+  void onPassKeyNotify(uint32_t) override {}
   bool onSecurityRequest() override { return true; }
-  bool onConfirmPIN(uint32_t) override { return false; } // Display-only passkey entry, not numeric comparison.
+  bool onConfirmPIN(uint32_t) override { return false; } // Numeric comparison is not used.
   void onAuthenticationComplete(esp_ble_auth_cmpl_t result) override {
     authenticated = result.success;
     Serial.printf("Lily BLE authentication: %s / reason=%u / heap=%lu\n", result.success ? "OK" : "FAILED", result.fail_reason, (unsigned long)ESP.getFreeHeap());
@@ -77,7 +75,7 @@ class ServerCallbacks : public BLEServerCallbacks {
     renewDeviceChallenge();
     connected = true;
     authenticated = false;
-    Serial.println("Lily BLE connected; enter the serial PIN when prompted.");
+    Serial.println("Lily BLE connected; establishing encrypted setup link.");
   }
   void onDisconnect(BLEServer*) override {
     renewDeviceChallenge();
@@ -167,38 +165,24 @@ void beginBleProvisioning(bool configured, BleProvisionHandler handler) {
     Serial.println("Lily BLE initialization failed: insufficient memory");
     return;
   }
-  Preferences pairingSettings;
-  if (!pairingSettings.begin("lily-ble", false)) {
-    Serial.println("Lily BLE setup cannot start: pairing settings storage failed"); return;
-  }
-  passkey = pairingSettings.getUInt("pin", 0);
-  if (passkey < 100000 || passkey > 999999) {
-    passkey = 100000 + esp_random() % 900000;
-    if (pairingSettings.putUInt("pin", passkey) != sizeof(passkey)) {
-      pairingSettings.end();
-      Serial.println("Lily BLE setup cannot start: could not persist fixed PIN"); return;
-    }
-  }
-  pairingSettings.end();
   const String name = "LILY-" + String(DEVICE_SERIAL).substring(0, 18);
   BLEDevice::init(name.c_str());
   deviceBluetoothReady();
   BLEDevice::setMTU(247);
-  BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_MITM);
+  BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
   BLEDevice::setSecurityCallbacks(new SecurityCallbacks());
   auto* security = new BLESecurity();
-  security->setStaticPIN(passkey);
-  // setStaticPIN changes some defaults, so enforce these AFTER it.
-  security->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_MITM_BOND);
-  security->setCapability(ESP_IO_CAP_OUT);
+  // Secure Connections Just Works: encrypted bonding without passkey entry.
+  security->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
+  security->setCapability(ESP_IO_CAP_NONE);
   security->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   security->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
   auto* service = server->createService(SERVICE);
   auto* info = service->createCharacteristic(INFO, BLECharacteristic::PROPERTY_READ);
-  // Reading identity triggers the system PIN prompt before any credential write.
-  info->setAccessPermissions(ESP_GATT_PERM_READ_ENC_MITM);
+  // Reading identity requires encryption before any credential write.
+  info->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED);
   class InfoCallbacks : public BLECharacteristicCallbacks {
     void onRead(BLECharacteristic* characteristic) override {
       JsonDocument doc;doc["version"]=1;doc["serial"]=DEVICE_SERIAL;doc["firmware"]=FIRMWARE_VERSION;
@@ -209,10 +193,10 @@ void beginBleProvisioning(bool configured, BleProvisionHandler handler) {
   };
   info->setCallbacks(new InfoCallbacks());
   auto* command = service->createCharacteristic(COMMAND, BLECharacteristic::PROPERTY_WRITE);
-  command->setAccessPermissions(ESP_GATT_PERM_WRITE_ENC_MITM);
+  command->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
   command->setCallbacks(new CommandCallbacks());
   statusCharacteristic = service->createCharacteristic(STATUS_UUID, BLECharacteristic::PROPERTY_READ);
-  statusCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ_ENC_MITM);
+  statusCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED);
   statusCharacteristic->setCallbacks(new StatusCallbacks());
   bleProvisionStatus("", "ready");
   service->start();
@@ -221,7 +205,7 @@ void beginBleProvisioning(bool configured, BleProvisionHandler handler) {
   advertising->setScanResponse(true);
   advertising->start();
   enabled = true;
-  Serial.printf("Lily BLE setup: %s / pairing PIN: %06lu / firmware: %s\n", name.c_str(), (unsigned long)passkey, FIRMWARE_VERSION);
+  Serial.printf("Lily BLE setup: %s / encrypted, no passkey / firmware: %s\n", name.c_str(), FIRMWARE_VERSION);
 }
 
 void pollBleProvisioning() {

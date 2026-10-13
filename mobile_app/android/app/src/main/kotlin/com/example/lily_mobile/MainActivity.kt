@@ -46,7 +46,7 @@ class MainActivity : FlutterActivity() {
                     if (peer?.address != device.address) return
                     when (device.bondState) {
                         BluetoothDevice.BOND_BONDED -> finishBond()
-                        BluetoothDevice.BOND_NONE -> finishBond("Pairing failed or was cancelled. Enter the fixed device PIN and retry.")
+                        BluetoothDevice.BOND_NONE -> finishBond("Pairing failed or was cancelled. Confirm the Bluetooth pairing request and retry.")
                     }
                 }
             }

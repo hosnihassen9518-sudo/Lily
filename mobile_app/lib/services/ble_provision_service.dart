@@ -79,11 +79,11 @@ class BleProvisionService {
         if (status['authenticated'] == true) break;
         if (status['authenticated'] == null) {
           throw const FormatException(
-              'Install the matching 0.7.1 BLE firmware before connecting.');
+              'Install the current Lily BLE firmware before connecting.');
         }
         if (DateTime.now().difference(started) >= const Duration(seconds: 10)) {
           throw TimeoutException(
-              'Bluetooth connected, but device authentication did not complete. Check the fixed pairing PIN.');
+              'Bluetooth connected, but device authentication did not complete. Forget the old Lily entry in Bluetooth settings, then reconnect.');
         }
         await Future<void>.delayed(pollInterval);
       }
@@ -106,7 +106,7 @@ class BleProvisionService {
         // A partial message must not be appended to on a later retry.
         await disconnect();
         throw StateError(
-            'Bluetooth transfer failed. Reconnect Lily and retry. If Android reports GATT 133, forget the old Lily bond in Bluetooth settings and pair again using the fixed device PIN.');
+            'Bluetooth transfer failed. Reconnect Lily and retry. If Android reports GATT 133, forget the old Lily bond in Bluetooth settings then reconnect.');
       }
       _check(revision, requireConnection: true);
     }

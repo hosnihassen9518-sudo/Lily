@@ -35,9 +35,9 @@ pio run --project-dir esp32_test_light
 pio run --project-dir esp32_test_light --target upload
 ```
 
-Use `esp32_device` for the audio/light model. The shared library must remain beside both target directories. Both targets use encrypted, PIN-bonded BLE. New factory boards may format their empty LittleFS filesystem on first boot. Identity, reset markers, receipt keys, and the fixed pairing PIN live separately in NVS and survive a filesystem format.
+Use `esp32_device` for the audio/light model. The shared library must remain beside both target directories. Both targets use encrypted Secure Connections Just Works BLE bonding without passkey entry. New factory boards may format their empty LittleFS filesystem on first boot. Identity, reset markers and receipt keys live separately in NVS and survive a filesystem format.
 
-Normal user resets preserve factory identity and the stable pairing PIN. Do not erase the entire ESP32 flash or NVS during normal account removal. When manufacturing a different inventory identity onto a previously used board, explicitly clear the old manufacturing identity first; changing the header is not an account-removal operation.
+Normal user resets preserve factory identity. Do not erase the entire ESP32 flash or NVS during normal account removal. When manufacturing a different inventory identity onto a previously used board, explicitly clear the old manufacturing identity first; changing the header is not an account-removal operation.
 
 ## Existing devices
 
@@ -70,13 +70,13 @@ Bluetooth stays available on configured devices, so users can change networks ev
 
 ## Remove and reset
 
-Open the device → Remove device and confirm. Normal controls stop while reset is pending. The ESP32 checks the persistent backend operation when connected, erases user files/settings and saved Wi-Fi/Bluetooth bonds, turns outputs off, and returns to BLE setup. Its factory serial/secret, receipt identity, server verification key, and stable PIN remain intact.
+Open the device → Remove device and confirm. Normal controls stop while reset is pending. The ESP32 checks the persistent backend operation when connected, erases user files/settings and saved Wi-Fi/Bluetooth bonds, turns outputs off, and returns to BLE setup. Its factory serial/secret, receipt identity, server verification key remain intact.
 
 The backend clears ownership, home/room placement, schedules, telemetry, user state, and the user-facing name only after verifying the device's signed completion receipt. It retains the factory inventory entry and its selected type/model. Retained MQTT schedules/state are cleared with acknowledgement before reassignment. If the broker is unavailable, activation waits for that cleanup to complete.
 
 If the device is off or unreachable, removal remains **Reset pending**. Keep it near the phone and use **Finish reset over Bluetooth**, or wait for it to reconnect. Power loss during erasure leaves a durable reset marker; reboot resumes the erase operation. A receipt survives a lost acknowledgement and can be relayed through the app. If reset was confirmed on the server but the device missed the reply, the Add Device flow can relay the receipt and confirm Bluetooth recovery before provisioning.
 
-After the device clears its saved bond, a phone that remembers the previous bond may need to forget the old Lily entry and pair again using the same device PIN. New owner setup requires compatible firmware and completion of the reset. The physical reset button is deferred; there is no GPIO reset action in this change.
+After the device clears its saved bond, a phone that remembers the previous bond may need to forget the old Lily entry and pair again without a code. New owner setup requires compatible firmware and completion of the reset. The physical reset button is deferred; there is no GPIO reset action in this change.
 
 ## Acceptance checks
 
