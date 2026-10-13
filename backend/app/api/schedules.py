@@ -9,6 +9,7 @@ from app.models.schedule import Schedule
 from app.models.user import User
 from app.schemas.schedule import ScheduleCreate
 from app.services.mqtt_service import mqtt_service
+from app.services.device_features import schedule_action
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
@@ -25,6 +26,13 @@ def sync_device_schedule(
         )
     ).all()
 
+    actions = {}
+    for schedule in schedules:
+        try:
+            action = schedule_action(db, device, schedule.action)
+        except HTTPException:
+            continue
+        actions[schedule.id] = action
     payload = {
         "timezone": "Europe/Paris",
         "schedules": [
@@ -35,9 +43,9 @@ def sync_device_schedule(
                     timespec="minutes"
                 ),
                 "days": schedule.days_of_week,
-                "action": schedule.action,
+                "action": actions[schedule.id],
             }
-            for schedule in schedules
+            for schedule in schedules if schedule.id in actions
         ],
     }
 
@@ -100,6 +108,7 @@ def create_schedule(
 
     from app.api.device_operations import require_mutable
     require_mutable(device)
+    schedule_action(db, device, payload.action)
     schedule = Schedule(
         device_id=device.id,
         user_id=user.id,

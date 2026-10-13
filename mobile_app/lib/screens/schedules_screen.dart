@@ -15,10 +15,22 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   List<Map<String, dynamic>> schedules = [];
   bool loading = true;
 
+  Device? currentDevice(AppState state) {
+    for (final device in state.devices) {
+      if (device.id == widget.device.id) return device;
+    }
+    return null;
+  }
+
+  bool canSchedule(Device? device) =>
+      device != null && (device.supportsLight || device.supportsAudio);
+
   Future<void> load() async {
+    if (!mounted || currentDevice(context.read<AppState>()) == null) return;
     setState(() => loading = true);
     try {
-      schedules = await context.read<AppState>().api.getSchedules(widget.device.id);
+      schedules =
+          await context.read<AppState>().api.getSchedules(widget.device.id);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -31,6 +43,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
   }
 
   Future<void> addSchedule() async {
+    if (!canSchedule(currentDevice(context.read<AppState>()))) return;
     final name = TextEditingController(text: 'Evening');
     TimeOfDay time = const TimeOfDay(hour: 20, minute: 0);
     final selectedDays = <int>{0, 1, 2, 3, 4, 5, 6};
@@ -39,102 +52,132 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('New schedule'),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: 'Name'),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    title: const Text('Time'),
-                    trailing: Text(time.format(context)),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: time,
-                      );
-                      if (picked != null) {
-                        setDialogState(() => time = picked);
-                      }
-                    },
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: List.generate(7, (day) {
-                      const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                      return FilterChip(
-                        label: Text(labels[day]),
-                        selected: selectedDays.contains(day),
-                        onSelected: (selected) {
-                          setDialogState(() {
-                            selected ? selectedDays.add(day) : selectedDays.remove(day);
-                          });
+      builder: (context) => Consumer<AppState>(
+        builder: (context, state, child) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final device = currentDevice(state);
+            return AlertDialog(
+              title: const Text('New schedule'),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (device == null) const Text('Device not found'),
+                      TextField(
+                        controller: name,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                      ),
+                      const SizedBox(height: 12),
+                      ListTile(
+                        title: const Text('Time'),
+                        trailing: Text(time.format(context)),
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: time,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => time = picked);
+                          }
                         },
-                      );
-                    }),
+                      ),
+                      Wrap(
+                        spacing: 6,
+                        children: List.generate(7, (day) {
+                          const labels = [
+                            'Mon',
+                            'Tue',
+                            'Wed',
+                            'Thu',
+                            'Fri',
+                            'Sat',
+                            'Sun'
+                          ];
+                          return FilterChip(
+                            label: Text(labels[day]),
+                            selected: selectedDays.contains(day),
+                            onSelected: (selected) {
+                              setDialogState(() {
+                                selected
+                                    ? selectedDays.add(day)
+                                    : selectedDays.remove(day);
+                              });
+                            },
+                          );
+                        }),
+                      ),
+                      if (device?.supportsLight == true)
+                        SwitchListTile(
+                          value: lightOn,
+                          onChanged: (v) => setDialogState(() => lightOn = v),
+                          title: const Text('Turn light on'),
+                        ),
+                      if (device?.supportsAudio == true)
+                        SwitchListTile(
+                          value: audioPlay,
+                          onChanged: (v) => setDialogState(() => audioPlay = v),
+                          title: const Text('Play audio'),
+                        ),
+                    ],
                   ),
-                  SwitchListTile(
-                    value: lightOn,
-                    onChanged: (v) => setDialogState(() => lightOn = v),
-                    title: const Text('Turn light on'),
-                  ),
-                  SwitchListTile(
-                    value: audioPlay,
-                    onChanged: (v) => setDialogState(() => audioPlay = v),
-                    title: const Text('Play audio'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: canSchedule(device)
+                      ? () => Navigator.pop(context, true)
+                      : null,
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
 
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
+    final device = currentDevice(context.read<AppState>());
+    if (!canSchedule(device)) return;
 
     final hh = time.hour.toString().padLeft(2, '0');
     final mm = time.minute.toString().padLeft(2, '0');
 
     await context.read<AppState>().api.createSchedule(
-          deviceId: widget.device.id,
-          name: name.text.trim().isEmpty ? 'Schedule' : name.text.trim(),
-          time: '$hh:$mm:00',
-          days: selectedDays.toList(),
-          action: {
-            'light': {'enabled': lightOn},
-            'audio': audioPlay ? 'play' : 'stop',
-          },
-        );
+      deviceId: widget.device.id,
+      name: name.text.trim().isEmpty ? 'Schedule' : name.text.trim(),
+      time: '$hh:$mm:00',
+      days: selectedDays.toList(),
+      action: {
+        if (device?.supportsLight == true) 'light': {'enabled': lightOn},
+        if (device?.supportsAudio == true) 'audio': audioPlay ? 'play' : 'stop',
+      },
+    );
 
-    await load();
+    if (mounted) await load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final device = currentDevice(context.watch<AppState>());
+    if (device == null) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('Schedules')),
+          body: const Center(child: Text('Device not found')));
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Schedules'),
         actions: [
-          IconButton(onPressed: addSchedule, icon: const Icon(Icons.add)),
+          IconButton(
+              onPressed: canSchedule(device) ? addSchedule : null,
+              icon: const Icon(Icons.add)),
         ],
       ),
       body: loading
@@ -168,7 +211,7 @@ class _SchedulesScreenState extends State<SchedulesScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: addSchedule,
+        onPressed: canSchedule(device) ? addSchedule : null,
         icon: const Icon(Icons.add),
         label: const Text('Schedule'),
       ),

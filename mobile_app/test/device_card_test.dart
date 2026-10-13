@@ -26,7 +26,9 @@ void main() {
     final api = ApiService(client: MockClient((request) async {
       if (request.method == 'PUT') {
         expect(request.url.path, endsWith('/devices/1/light'));
-        enabled = (jsonDecode(request.body) as Map)['enabled'] as bool;
+        final body = jsonDecode(request.body) as Map;
+        expect(body.keys, ['enabled']);
+        enabled = body['enabled'] as bool;
         commands.add(enabled);
         return http.Response('{"mqtt_published":true}', 200);
       }

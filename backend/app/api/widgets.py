@@ -51,8 +51,8 @@ def widget_user(creds:HTTPAuthorizationCredentials=Depends(bearer),db:Session=De
 
 def projection(db,device):
     data=serialize_device(device,db);caps=data['smart_home']['capabilities']
-    light=not caps or 'light' in caps or ('power' in caps and ('brightness' in caps or 'rgb' in caps))
-    power=light or 'power' in caps
+    light='light' in caps
+    power='power' in caps
     state=data['light']['enabled'] if light else data['generic_state'].get('enabled')
     return {'id':device.id,'generation':device_generation(db,device),'name':device.name or data['smart_home']['device_type_name'] or device.model,'serial_number':device.serial_number,'status':data['status'],'online':bool(device.is_online and data['status']=='ONLINE'),'enabled':state if isinstance(state,bool) else None,'can_control':bool(power and data['status']=='ONLINE'),'supports_light':light}
 

@@ -14,6 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 object LilyWidgetStore {
     private val lock=Any()
@@ -51,11 +52,54 @@ object LilyWidgetStore {
         save(c,snapshot,identity(config))
     }
     private fun empty()=JSONObject().put("devices",org.json.JSONArray()).put("message","Open Lily and sign in to use widgets.")
+    private fun pending(c:Context):WidgetPendingCommands {
+        val entries=mutableMapOf<Int,WidgetCommandTicket>()
+        try {
+            val data=JSONObject(publicPrefs(c).getString("pending_commands","{}") ?: "{}")
+            for(key in data.keys()) {
+                val value=data.getJSONObject(key)
+                entries[key.toInt()]=WidgetCommandTicket(value.getString("request"),value.getString("context"),value.getInt("generation"),value.getLong("created"))
+            }
+        }catch(_:Exception){entries.clear()}
+        return WidgetPendingCommands(entries)
+    }
+    private fun savePending(c:Context,commands:WidgetPendingCommands) {
+        val data=JSONObject()
+        for((id,ticket) in commands.entries) data.put(id.toString(),JSONObject().put("request",ticket.requestId).put("context",ticket.contextId).put("generation",ticket.generation).put("created",ticket.createdAtMs))
+        check(publicPrefs(c).edit().putString("pending_commands",data.toString()).commit()) { "Could not save pending widget command" }
+    }
+    fun beginCommand(c:Context,id:Int,expected:String?,generation:Int):String?=synchronized(lock){
+        val current=config(c) ?: return@synchronized null
+        val context=identity(current)
+        if(expected!=context || expired(current))return@synchronized null
+        val rows=snapshot(c).optJSONArray("devices") ?: return@synchronized null
+        val row=(0 until rows.length()).map{rows.getJSONObject(it)}.firstOrNull{it.optInt("id")==id}
+        if(row==null || !row.optBoolean("can_control") || row.optInt("generation",-1)!=generation)return@synchronized null
+        val commands=pending(c);val ticket=WidgetCommandTicket(UUID.randomUUID().toString(),context,generation,System.currentTimeMillis())
+        if(!commands.begin(id,ticket,System.currentTimeMillis()))return@synchronized null
+        savePending(c,commands);message(c,"Sending command…",context)
+        ticket.requestId
+    }
+    fun currentCommand(c:Context,id:Int,request:String,context:String,generation:Int):Boolean=synchronized(lock){
+        config(c)?.let{identity(it)}==context && pending(c).isCurrent(id,request,context,generation,System.currentTimeMillis())
+    }
+    fun finishCommand(c:Context,id:Int,request:String):Boolean=synchronized(lock){
+        val commands=pending(c)
+        if(!commands.finish(id,request))return@synchronized false
+        savePending(c,commands);true
+    }
     fun snapshot(c:Context):JSONObject=synchronized(lock){
         val current=config(c) ?: return@synchronized empty()
         try {
             val value=JSONObject(publicPrefs(c).getString("snapshot","{}") ?: "{}")
-            if(value.optString("context_id")!=identity(current))empty() else value
+            if(value.optString("context_id")!=identity(current))empty() else {
+                val commands=pending(c);val rows=value.optJSONArray("devices")
+                for(i in 0 until (rows?.length() ?: 0)) {
+                    val row=rows!!.getJSONObject(i);val ticket=commands.entries[row.optInt("id")]
+                    row.put("pending",ticket?.activeFor(identity(current),row.optInt("generation",-1),System.currentTimeMillis())==true)
+                }
+                value
+            }
         }catch(_:Exception){empty()}
     }
     private fun save(c:Context,value:JSONObject,contextId:String){
@@ -75,6 +119,6 @@ object LilyWidgetStore {
     fun clear(c:Context,expected:String?=null)=synchronized(lock){
         if(expected!=null && config(c)?.let{identity(it)}!=expected)return@synchronized
         privatePrefs(c).edit().clear().commit()
-        publicPrefs(c).edit().putString("snapshot",JSONObject().put("devices",org.json.JSONArray()).put("message","Open Lily and sign in to use widgets.").toString()).commit()
+        publicPrefs(c).edit().remove("pending_commands").putString("snapshot",JSONObject().put("devices",org.json.JSONArray()).put("message","Open Lily and sign in to use widgets.").toString()).commit()
     }
 }

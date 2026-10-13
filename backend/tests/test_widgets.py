@@ -32,6 +32,13 @@ def test_widget_power_checks_owner_state_and_session_expiry(client,db,monkeypatc
     wh={'Authorization':'Bearer '+widget['token']}
     device=Device(serial_number='WIDGET-DEVICE',secret_hash='unused',owner_id=user.id,lifecycle_status='ACTIVE',is_online=True,brightness=23,color_r=10,color_g=11,color_b=12)
     db.add(device);db.commit()
+    from app.models.smart_device import DeviceProfile, DeviceType, DeviceTypeCapability
+    dtype = DeviceType(key='widget_light', name='Widget Light')
+    db.add(dtype); db.flush()
+    db.add(DeviceProfile(device_id=device.id, device_type_id=dtype.id))
+    for capability in ('power','light'):
+        db.add(DeviceTypeCapability(device_type_id=dtype.id, capability=capability))
+    db.commit()
     from app.services.mqtt_service import mqtt_service
     messages=[]
     monkeypatch.setattr(mqtt_service,'publish_command',lambda serial,payload,**kwargs:(messages.append(payload) or True))

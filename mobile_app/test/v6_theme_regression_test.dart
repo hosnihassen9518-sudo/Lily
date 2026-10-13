@@ -31,11 +31,15 @@ void main() {
           'name': 'Lily Audio Light',
           'online': true,
           'status': 'ONLINE',
-          'smart_home': {'home_id': 1, 'room_id': 1},
+          'smart_home': {
+            'home_id': 1,
+            'room_id': 1,
+            'capabilities': ['power', 'light', 'audio']
+          },
         })
       ];
-      await tester.pumpWidget(ChangeNotifierProvider.value(
-          value: state, child: const LilyApp()));
+      await tester.pumpWidget(
+          ChangeNotifierProvider.value(value: state, child: const LilyApp()));
       await tester.pumpAndSettle();
       expect(find.byType(LilyLogo), findsOneWidget);
       expect(find.text('A little everyday magic'), findsOneWidget);
@@ -52,7 +56,8 @@ void main() {
       final material = tester.widget<Material>(
           find.descendant(of: button, matching: find.byType(Material)).first);
       expect(material.color, const Color(0xFFDCEFFC),
-          reason: 'Preserve the pale-blue device control from the V6 reference.');
+          reason:
+              'Preserve the pale-blue device control from the V6 reference.');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       state.dispose();

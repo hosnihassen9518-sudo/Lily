@@ -26,16 +26,17 @@ class _DeviceCardState extends State<DeviceCard> {
         await state.api.setLight(
           device.id,
           enabled: !device.lightEnabled,
-          brightness: device.brightness,
-          r: device.r,
-          g: device.g,
-          b: device.b,
+          brightness:
+              device.hasCapability('brightness') ? device.brightness : null,
+          r: device.hasCapability('rgb') ? device.r : null,
+          g: device.hasCapability('rgb') ? device.g : null,
+          b: device.hasCapability('rgb') ? device.b : null,
         );
       } else {
         await state.api.genericCommand(
           device.id,
           'power',
-          {'enabled': false},
+          {'enabled': device.genericState['enabled'] != true},
         );
       }
       await state.refresh();
@@ -52,7 +53,7 @@ class _DeviceCardState extends State<DeviceCard> {
   Future<void> _play(BuildContext context) async {
     if (!device.online || !device.supportsAudio || !device.audioLoaded) return;
     try {
-      if (device.audioPlaying) {
+      if (device.supportsAudio && device.audioPlaying) {
         await context.read<AppState>().api.stopAudio(device.id);
       } else {
         await context.read<AppState>().api.playAudio(device.id);
@@ -112,8 +113,11 @@ class _DeviceCardState extends State<DeviceCard> {
                                   child: Text(
                                       sendingPower
                                           ? 'Sending...'
-                                          : !device.supportsLight ||
-                                                  device.lightEnabled
+                                          : (device.supportsLight
+                                                  ? device.lightEnabled
+                                                  : device.genericState[
+                                                          'enabled'] ==
+                                                      true)
                                               ? 'Turn off'
                                               : 'Turn on',
                                       textAlign: TextAlign.center))),
@@ -132,7 +136,7 @@ class _DeviceCardState extends State<DeviceCard> {
                                 onPressed: () => _open(context),
                                 icon: const Icon(Icons.tune, size: 18),
                                 label: const Text('More'))),
-                        if (device.audioPlaying)
+                        if (device.supportsAudio && device.audioPlaying)
                           const Text('Music playing',
                               style: TextStyle(fontSize: 12)),
                       ])),

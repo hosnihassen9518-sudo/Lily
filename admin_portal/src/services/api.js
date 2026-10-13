@@ -70,6 +70,10 @@ export const api = {
   resyncDevice: (id) => request(`/admin/device-inventory/${id}/resync`, {method:'POST'}),
   exportDevices: (fields) => request('/admin/devices/export.csv'+(fields ? '?fields='+encodeURIComponent(fields.join(',')) : '')),
   deviceModels: () => request('/admin/device-models'),
+  deviceFeatures: () => request('/admin/device-features'),
+  createDeviceModel: (payload) => request('/admin/device-models', {method:'POST',body:JSON.stringify(payload)}),
+  updateDeviceModel: (key,payload) => request(`/admin/device-models/${encodeURIComponent(key)}`, {method:'PATCH',body:JSON.stringify(payload)}),
+  deleteDeviceModel: (key) => request(`/admin/device-models/${encodeURIComponent(key)}`, {method:'DELETE'}),
   generateDevice: (payload) => request('/admin/device-inventory', {method: 'POST', body: JSON.stringify(payload)}),
   devices: () => request("/devices/admin/all"),
   createDevice: (payload) =>

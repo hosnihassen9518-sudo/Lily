@@ -23,10 +23,10 @@ class DeviceActivate(BaseModel):
 
 class LightCommand(BaseModel):
     enabled: bool
-    brightness: int = Field(ge=0, le=100)
-    r: int = Field(ge=0, le=255)
-    g: int = Field(ge=0, le=255)
-    b: int = Field(ge=0, le=255)
+    brightness: int | None = Field(default=None, ge=0, le=100)
+    r: int | None = Field(default=None, ge=0, le=255)
+    g: int | None = Field(default=None, ge=0, le=255)
+    b: int | None = Field(default=None, ge=0, le=255)
 
 class VolumeCommand(BaseModel):
     volume: int = Field(ge=0, le=100)

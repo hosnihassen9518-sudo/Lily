@@ -98,12 +98,8 @@ class Device {
 
   String get displayName =>
       name?.trim().isNotEmpty == true ? name! : (deviceTypeName ?? model);
-  bool hasCapability(String capability) =>
-      capabilities.isEmpty || capabilities.contains(capability);
-  bool get supportsLight =>
-      capabilities.contains('light') ||
-      (hasCapability('power') &&
-          (hasCapability('brightness') || hasCapability('rgb')));
+  bool hasCapability(String capability) => capabilities.contains(capability);
+  bool get supportsLight => hasCapability('light');
   bool get supportsAudio => hasCapability('audio');
   String? get currentTrackTitle =>
       genericState['current_track_title']?.toString();

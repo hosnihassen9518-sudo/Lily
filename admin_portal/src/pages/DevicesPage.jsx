@@ -47,6 +47,13 @@ export default function DevicesPage() {
     try {const response=await api.exportDevices(columns);download(await response.text(),'lily-devices.csv','text/csv');setShowExport(false);}catch(err){setError(err.message);}
   }
   const [form, setForm] = useState({device_type_id: '', model_key: ''});
+  async function refreshCatalog() {
+    try {
+      const [t,m] = await Promise.all([api.deviceTypes(),api.deviceModels()]);
+      setTypes(t);setModels(m);
+      setForm(current=>m.some(model=>model.key===current.model_key&&model.device_type_id===Number(current.device_type_id))?current:{...current,model_key:''});
+    }catch(err){setError(err.message);}
+  }
   useEffect(() => {
     Promise.all([api.deviceTypes(), api.deviceModels()]).then(([t, m]) => {
       setTypes(t); setModels(m);
@@ -122,7 +129,7 @@ export default function DevicesPage() {
           <h1>Devices</h1>
           <p>Manage factory inventory and monitor deployed devices.</p>
         </div>
-        <button className="primary-button" onClick={() => setShowCreate(true)}>
+        <button className="primary-button" onClick={() => {setShowCreate(true);refreshCatalog();}}>
           <Plus size={18} />
           Add device
         </button>

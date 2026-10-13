@@ -2,7 +2,7 @@ name: Lily Android APK
 
 on:
   push:
-    branches: [feat/device-home-widget, main]
+    branches: [feat/device-home-widget, codex/model-features-device-config, main]
     paths:
       - 'mobile_app/**'
       - '.github/workflows/lily-android.yml'
@@ -44,6 +44,9 @@ jobs:
         run: flutter pub get
       - name: Test application, sessions and V6 theme
         run: flutter test
+      - name: Test widget command recovery
+        working-directory: mobile_app/android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
       - name: Restore existing sideload signing identity
         env:
           LILY_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.LILY_ANDROID_DEBUG_KEYSTORE_BASE64 }}
@@ -61,17 +64,17 @@ jobs:
       - name: Verify and name APK
         run: |
           mkdir -p build/app/outputs/lily
-          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/lily/LilyV10.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify build/app/outputs/lily/LilyV10.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/app/outputs/lily/LilyV10.apk > build/app/outputs/lily/package-info.txt
-          grep "versionCode='8' versionName='0.9.1'" build/app/outputs/lily/package-info.txt
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/lily/LilyV11.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify build/app/outputs/lily/LilyV11.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/app/outputs/lily/LilyV11.apk > build/app/outputs/lily/package-info.txt
+          grep "versionCode='9' versionName='0.10.0'" build/app/outputs/lily/package-info.txt
           grep "application-label:'Lily'" build/app/outputs/lily/package-info.txt
           cd build/app/outputs/lily
-          sha256sum LilyV10.apk > SHA256SUMS
+          sha256sum LilyV11.apk > SHA256SUMS
       - name: Publish downloadable APK
         uses: actions/upload-artifact@v4
         with:
-          name: LilyV10-${{ github.sha }}
+          name: LilyV11-${{ github.sha }}
           path: mobile_app/build/app/outputs/lily/
           if-no-files-found: error
           retention-days: 30

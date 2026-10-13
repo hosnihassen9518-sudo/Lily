@@ -18,7 +18,7 @@ const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/homes", label: "Homes", icon: House },
   { to: "/devices", label: "Devices", icon: Cpu },
-  { to: "/device-types", label: "Device Types", icon: Shapes },
+  { to: "/device-types", label: "Models & features", icon: Shapes },
   { to: "/users", label: "Users", icon: Users },
   { to: "/music", label: "Music", icon: Music2 },
   { to: '/settings', label: 'Settings', icon: Settings },

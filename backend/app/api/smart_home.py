@@ -16,6 +16,7 @@ from app.schemas.smart_home import (
     HomeCreate, HomeUpdate, RoomCreate, RoomUpdate, TelemetryIn,
 )
 from app.services.mqtt_service import mqtt_service
+from app.services.device_features import associated_model, validate_state, validate_command, light_payload
 
 router = APIRouter(tags=["smart-home"])
 
@@ -140,14 +141,14 @@ def create_device_type(payload: DeviceTypeCreate, admin: User = Depends(require_
 
 @router.get("/devices/{device_id}/profile")
 def get_profile(device_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user.id)
     p = db.get(DeviceProfile, device_id)
     return {"device_id": device_id, "home_id": p.home_id if p else None, "room_id": p.room_id if p else None, "device_type_id": p.device_type_id if p else None, "metadata": p.metadata_json if p else {}}
 
 
 @router.put("/devices/{device_id}/profile")
 def update_profile(device_id: int, payload: DeviceProfileUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user.id)
     if payload.home_id is not None: _home_for_user(db, payload.home_id, user.id)
     if payload.room_id is not None:
         room = db.get(Room, payload.room_id)
@@ -158,12 +159,19 @@ def update_profile(device_id: int, payload: DeviceProfileUpdate, user: User = De
     if payload.device_type_id is not None and not db.get(DeviceType, payload.device_type_id):
         raise HTTPException(status_code=404, detail="Device type not found")
     p = db.get(DeviceProfile, device_id) or DeviceProfile(device_id=device_id)
+    model = associated_model(db, device)
+    factory_key = (p.metadata_json or {}).get('model_key') or (model.key if model else None)
+    if payload.metadata is not None and 'model_key' in payload.metadata and payload.metadata['model_key'] != factory_key:
+        raise HTTPException(409, 'Factory model identity cannot change')
+    if model and 'device_type_id' in payload.model_fields_set and payload.device_type_id != model.device_type_id:
+        raise HTTPException(409, 'Factory device type cannot change')
     if p not in db: db.add(p)
     # model_fields_set lets explicit null detach a device from a room/home/type.
     if "home_id" in payload.model_fields_set: p.home_id = payload.home_id
     if "room_id" in payload.model_fields_set: p.room_id = payload.room_id
     if "device_type_id" in payload.model_fields_set: p.device_type_id = payload.device_type_id
-    if payload.metadata is not None: p.metadata_json = payload.metadata
+    if payload.metadata is not None:
+        p.metadata_json = {**payload.metadata, **({'model_key':factory_key} if factory_key else {})}
     db.commit(); db.refresh(p)
     return {"device_id": device_id, "home_id": p.home_id, "room_id": p.room_id, "device_type_id": p.device_type_id, "metadata": p.metadata_json}
 
@@ -177,7 +185,8 @@ def get_state(device_id: int, user: User = Depends(get_current_user), db: Sessio
 
 @router.put("/devices/{device_id}/state")
 def set_state(device_id: int, payload: DeviceStateUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user.id)
+    validate_state(db, device, payload.state)
     state = db.get(DeviceState, device_id) or DeviceState(device_id=device_id)
     if state not in db: db.add(state)
     state.state = payload.state
@@ -189,6 +198,8 @@ def set_state(device_id: int, payload: DeviceStateUpdate, user: User = Depends(g
 @router.post("/devices/{device_id}/command")
 def generic_command(device_id: int, payload: GenericCommand, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     device = _owned_device(db, device_id, user.id)
+    validate_command(db, device, payload.model_dump())
+    if payload.type == 'light': payload.payload = light_payload(db, device, payload.payload)
     from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(device.serial_number, {"type": payload.type, "payload": payload.payload}, generation=device_generation(db,device))
     db.commit()

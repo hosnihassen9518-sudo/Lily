@@ -69,6 +69,15 @@ class MQTTService:
         with SessionLocal() as db:
             ids=list(db.scalars(select(DeviceOperation.id).where(DeviceOperation.broker_cleanup_pending==1)))
             for operation_id in ids:cleanup_retained_operation(db,operation_id)
+            from app.models.device_lifecycle import AppSetting
+            from app.services.feature_schedule_sync import flush_pending
+            pending = list(db.scalars(select(AppSetting).where(AppSetting.key.like('device_schedule_features:%'))))
+            for marker in pending:
+                device_id = (marker.value_json or {}).get('device_id')
+                device = db.scalar(select(Device).where(Device.id == device_id).with_for_update())
+                if device is None: db.delete(marker)
+                else: flush_pending(db, device)
+            db.commit()
 
     def _get_device(self, db, serial: str):
         return db.scalar(select(Device).where(Device.serial_number == serial).with_for_update().execution_options(populate_existing=True))
@@ -125,6 +134,8 @@ class MQTTService:
             if device.lifecycle_status in ("RESET_PENDING", "INVENTORY"):
                 return
 
+            was_online = device.is_online
+
             if event == "status":
                 online = payload.get("status") == "online"
                 device.is_online = online
@@ -170,6 +181,9 @@ class MQTTService:
                 for metric, value in payload.items():
                     db.add(self._telemetry_row(device.id, metric, value, now))
 
+            if event in ('status', 'heartbeat') and device.is_online and device.lifecycle_status != 'DISABLED':
+                from app.services.feature_schedule_sync import flush_pending
+                flush_pending(db, device, force=event == 'status' or not was_online)
             db.commit()
 
     def publish_command(self, serial: str, payload: dict, generation=None):

@@ -40,3 +40,15 @@ it('shows saved credentials and lets administrators choose CSV fields',async()=>
  fireEvent.click(screen.getByText('Export CSV'));
  expect(screen.getByText('Choose fields')).not.toBeNull();
 });
+
+it('refreshes available models when factory creation is reopened',async()=>{
+ api.devices.mockResolvedValue([]);
+ api.deviceModels.mockResolvedValue([{key:'test',name:'Test light',device_type_id:1}]);
+ const {container}=render(<DevicesPage/>);
+ await waitFor(()=>expect(api.deviceModels).toHaveBeenCalled());
+ api.deviceModels.mockResolvedValue([{key:'new',name:'New model',device_type_id:1}]);
+ fireEvent.click(screen.getByText('Add device'));
+ fireEvent.change(container.querySelector('select'),{target:{value:'1'}});
+ await screen.findByText('New model');
+ expect(screen.queryByText('Test light')).toBeNull();
+});

@@ -16,13 +16,14 @@ import 'package:lily_mobile/services/api_service.dart';
 void main() {
   testWidgets('Native account exposes widget setup', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final state=AppState();
-    await tester.pumpWidget(ChangeNotifierProvider.value(value:state,child:const MaterialApp(home:HomeScreen())));
+    final state = AppState();
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: state, child: const MaterialApp(home: HomeScreen())));
     await tester.tap(find.text('Account'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Home-screen widgets'));
     await tester.pumpAndSettle();
-    expect(find.text('Enable / refresh widgets'),findsOneWidget);
+    expect(find.text('Enable / refresh widgets'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     state.dispose();
   });
@@ -66,7 +67,13 @@ void main() {
       return download.future;
     })));
     state.devices = [
-      Device.fromJson({'id': 1, 'serial_number': 'test'})
+      Device.fromJson({
+        'id': 1,
+        'serial_number': 'test',
+        'smart_home': {
+          'capabilities': ['audio']
+        }
+      })
     ];
     state.music = [
       MusicTrack.fromJson({'id': 1, 'title': 'Test song'})

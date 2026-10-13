@@ -13,6 +13,7 @@ class DeviceModel(Base):
     device_type_id: Mapped[int] = mapped_column(ForeignKey('device_types.id'))
     hardware_version: Mapped[str] = mapped_column(String(50), default='1.0')
     firmware_target: Mapped[str] = mapped_column(String(80))
+    capabilities: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True), nullable=True)
 
 class AppSetting(Base):
     __tablename__ = 'app_settings'

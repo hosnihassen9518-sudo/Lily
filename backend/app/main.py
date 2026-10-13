@@ -49,9 +49,7 @@ def bootstrap():
                 dtype = DeviceType(key=key, name=name)
                 db.add(dtype)
                 db.flush()
-            existing = set(db.scalars(select(DeviceTypeCapability.capability).where(DeviceTypeCapability.device_type_id == dtype.id)).all())
-            for capability in capabilities:
-                if capability not in existing:
+                for capability in capabilities:
                     db.add(DeviceTypeCapability(device_type_id=dtype.id, capability=capability))
         db.commit()
         from app.services.device_inventory import seed_models

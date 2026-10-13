@@ -10,8 +10,43 @@ from app.models.home import Home, Room
 from app.models.smart_device import DeviceTelemetry, DeviceType
 from app.models.user import User
 from app.schemas.admin import ActiveUpdate
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.device_lifecycle import DeviceModel
+from app.services.device_features import FEATURES, model_capabilities, validate_capabilities
+from pydantic import ConfigDict
+
+class ModelCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    key: str = Field(min_length=1, max_length=80, pattern=r'^[a-z0-9_\-]+$')
+    name: str = Field(min_length=1, max_length=80)
+    device_type_id: int
+    hardware_version: str = Field(default='1.0', min_length=1, max_length=50)
+    firmware_target: str
+    capabilities: list[str] | None = None
+
+class ModelUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    hardware_version: str | None = Field(default=None, min_length=1, max_length=50)
+    device_type_id: int | None = None
+    firmware_target: str | None = None
+    capabilities: list[str] | None = None
+
+def serialize_model(db, model):
+    return {**{key:getattr(model,key) for key in ('key','name','device_type_id','hardware_version','firmware_target')},
+            'capabilities': model_capabilities(db, model)}
+
+def validate_model(db, dtype_id, target):
+    dtype = db.get(DeviceType, dtype_id)
+    if not dtype: raise HTTPException(422, 'Unknown device type')
+    expected = {'lily_audio_light':'esp32_device','test_light':'esp32_test_light'}
+    if target not in expected.values() or (dtype.key in expected and target != expected[dtype.key]):
+        raise HTTPException(422, 'Firmware target does not match device type')
+
+def model_in_use(db, model):
+    from app.models.smart_device import DeviceProfile
+    return any((p.metadata_json or {}).get('model_key') == model.key for p in db.scalars(select(DeviceProfile))) or bool(
+        db.scalar(select(Device.id).where(Device.model.in_([model.key, model.name])).limit(1)))
 
 class InventoryCreate(BaseModel):
     device_type_id: int
@@ -32,7 +67,60 @@ def device_models(device_type_id: int | None = None, db: Session = Depends(get_d
     query = select(DeviceModel)
     if device_type_id is not None:
         query = query.where(DeviceModel.device_type_id == device_type_id)
-    return [{'key': m.key, 'name': m.name, 'device_type_id': m.device_type_id, 'firmware_target': m.firmware_target} for m in db.scalars(query)]
+    return [serialize_model(db, m) for m in db.scalars(query)]
+
+@router.get('/device-features')
+def device_features():
+    return FEATURES
+
+@router.post('/device-models')
+def create_model(payload: ModelCreate, db: Session = Depends(get_db)):
+    if db.get(DeviceModel, payload.key): raise HTTPException(409, 'Model key already exists')
+    validate_model(db, payload.device_type_id, payload.firmware_target)
+    values = payload.model_dump(); values['capabilities'] = validate_capabilities(payload.capabilities)
+    model = DeviceModel(**values); db.add(model); db.commit()
+    return serialize_model(db, model)
+
+@router.patch('/device-models/{key}')
+def update_model(key: str, payload: ModelUpdate, db: Session = Depends(get_db)):
+    model = db.scalar(select(DeviceModel).where(DeviceModel.key == key).with_for_update())
+    if not model: raise HTTPException(404, 'Model not found')
+    values = payload.model_dump(exclude_unset=True)
+    if any(value is None for field,value in values.items() if field != 'capabilities'):
+        raise HTTPException(422, 'Model fields cannot be null')
+    if model_in_use(db, model) and any(field in values and values[field] != getattr(model,field)
+                                         for field in ('device_type_id','hardware_version','firmware_target')):
+        raise HTTPException(409, 'Factory associations cannot change for a model in use')
+    validate_model(db, values.get('device_type_id',model.device_type_id),values.get('firmware_target',model.firmware_target))
+    if 'capabilities' in values: values['capabilities'] = validate_capabilities(values['capabilities'])
+    from app.services.device_features import associated_model
+    from app.models.smart_device import DeviceProfile
+    linked_devices = []
+    for device in db.scalars(select(Device).order_by(Device.id).with_for_update()).all():
+        linked = associated_model(db, device)
+        if linked is None or linked.key != model.key: continue
+        linked_devices.append(device)
+        profile = db.get(DeviceProfile, device.id)
+        if profile is None:
+            profile = DeviceProfile(device_id=device.id, device_type_id=model.device_type_id)
+            db.add(profile)
+        profile.metadata_json = {**(profile.metadata_json or {}), 'model_key':model.key}
+    for field,value in values.items(): setattr(model,field,value)
+    pending = []
+    if 'capabilities' in values:
+        from app.services.feature_schedule_sync import mark_pending, flush_pending
+        for device in linked_devices:
+            mark_pending(db, device)
+            if not flush_pending(db, device): pending.append(device.id)
+    db.commit()
+    return {**serialize_model(db,model), 'schedule_sync_pending': pending}
+
+@router.delete('/device-models/{key}')
+def delete_model(key: str, db: Session = Depends(get_db)):
+    model = db.scalar(select(DeviceModel).where(DeviceModel.key == key).with_for_update())
+    if not model: raise HTTPException(404, 'Model not found')
+    if model_in_use(db, model): raise HTTPException(409, 'Model is in use')
+    db.delete(model); db.commit(); return {'ok':True}
 
 @router.get('/device-factory-public-key')
 def factory_public_key(db: Session = Depends(get_db)):

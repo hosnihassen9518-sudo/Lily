@@ -15,8 +15,11 @@ class LilyWidgetService:RemoteViewsService(){
   override fun getCount()=rows.length()
   override fun getViewAt(position:Int):RemoteViews{
    val row=rows.getJSONObject(position);val view=RemoteViews(context.packageName,R.layout.lily_widget_row)
-   view.setTextViewText(R.id.device_name,row.optString("name","Lily device"));view.setTextViewText(R.id.device_status,row.optString("status","OFFLINE").replace('_',' '))
-   val allowed=row.optBoolean("can_control") && contextId.isNotEmpty()
+   view.setTextViewText(R.id.device_name,row.optString("name","Lily device"))
+   val pending=row.optBoolean("pending")
+   val power=if(row.has("enabled") && !row.isNull("enabled"))if(row.optBoolean("enabled"))" • On" else " • Off" else ""
+   view.setTextViewText(R.id.device_status,if(pending)"Sending…" else row.optString("status","OFFLINE").replace('_',' ')+power)
+   val allowed=row.optBoolean("can_control") && contextId.isNotEmpty() && !pending
    for((button,enabled) in listOf(R.id.device_on to true,R.id.device_off to false)){
     view.setBoolean(button,"setEnabled",allowed)
     view.setOnClickFillInIntent(button,Intent().putExtra("device_id",row.getInt("id")).putExtra("enabled",enabled).putExtra("context_id",contextId).putExtra("generation",row.optInt("generation",-1)))

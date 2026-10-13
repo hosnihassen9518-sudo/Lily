@@ -18,7 +18,7 @@ def c_string(value: str) -> str:
     return '"' + ''.join(('\\' + chr(byte)) if byte in (34, 92) else chr(byte) if 32 <= byte < 127 else '\\%03o' % byte for byte in value.encode('utf-8')) + '"'
 
 def create_inventory(db, type_id: int, model_key: str):
-    model = db.get(DeviceModel, model_key)
+    model = db.scalar(select(DeviceModel).where(DeviceModel.key == model_key).with_for_update())
     dtype = db.get(DeviceType, type_id)
     if not model or not dtype or model.device_type_id != type_id:
         raise HTTPException(422, 'Select a supported model for this device type.')
@@ -71,4 +71,17 @@ def seed_models(db):
             db.add(DeviceModel(key=key, name=name, device_type_id=dtype.id, firmware_target=target))
     if db.get(AppSetting, 'mobile_session_months') is None:
         db.add(AppSetting(key='mobile_session_months', value_json={'months': 3}))
+    db.flush()
+    catalog = db.scalars(select(DeviceModel)).all()
+    for device in db.scalars(select(Device)):
+        profile = db.get(DeviceProfile, device.id)
+        if profile and (profile.metadata_json or {}).get('model_key'): continue
+        matches = [model for model in catalog if device.model in (model.key, model.name)]
+        if len(matches) != 1: continue
+        model = matches[0]
+        if profile is None:
+            profile = DeviceProfile(device_id=device.id)
+            db.add(profile)
+        profile.device_type_id = model.device_type_id
+        profile.metadata_json = {**(profile.metadata_json or {}), 'model_key':model.key}
     db.commit()

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,7 +56,9 @@ class WidgetSync {
     _configuredFor = null;
     status = 'Sign in to Lily to use widgets.';
     return _serialize(() async {
-      try { await platform.clear(); } catch (_) {
+      try {
+        await platform.clear();
+      } catch (_) {
         // Parent-session revocation must proceed even if native storage fails.
       }
     });
@@ -74,8 +75,15 @@ class WidgetSync {
                   'online': d.online,
                   'enabled': d.supportsLight
                       ? d.lightEnabled
-                      : (d.genericState['enabled'] is bool ? d.genericState['enabled'] : null),
+                      : (d.genericState['enabled'] is bool
+                          ? d.genericState['enabled']
+                          : null),
                   'supports_light': d.supportsLight,
+                  'capabilities': d.capabilities,
+                  'supports_audio': d.supportsAudio,
+                  'supports_brightness': d.hasCapability('brightness'),
+                  'supports_rgb': d.hasCapability('rgb'),
+                  'supports_volume': d.hasCapability('volume'),
                   'can_control': d.online &&
                       !['RESET_PENDING', 'DISABLED', 'INVENTORY']
                           .contains(d.status) &&

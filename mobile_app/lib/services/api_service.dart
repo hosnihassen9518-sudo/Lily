@@ -352,20 +352,20 @@ class ApiService {
   Future<void> setLight(
     int deviceId, {
     required bool enabled,
-    required int brightness,
-    required int r,
-    required int g,
-    required int b,
+    int? brightness,
+    int? r,
+    int? g,
+    int? b,
   }) async {
     final result = await _jsonRequest(
       '/devices/$deviceId/light',
       method: 'PUT',
       body: {
         'enabled': enabled,
-        'brightness': brightness,
-        'r': r,
-        'g': g,
-        'b': b,
+        if (brightness != null) 'brightness': brightness,
+        if (r != null) 'r': r,
+        if (g != null) 'g': g,
+        if (b != null) 'b': b,
       },
     );
     _checkCommandPublished(result);

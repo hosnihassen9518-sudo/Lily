@@ -680,3 +680,7 @@ td strong { display: block; }
   .stat-grid { grid-template-columns: 1fr; }
   .two-columns { grid-template-columns: 1fr; }
 }
+.model-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.model-features label { display: flex; align-items: flex-start; gap: 10px; }
+.model-features input { width: auto; margin-top: 3px; }
+.model-features small { display: block; margin-top: 4px; }

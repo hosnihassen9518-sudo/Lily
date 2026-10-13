@@ -49,6 +49,31 @@ ApiService api() => ApiService(
   ..token =
       'h.${base64Url.encode(utf8.encode(jsonEncode({'sid': 'parent-one'})))}.s';
 void main() {
+  test('Widget projection requires explicit model features', () {
+    final sync = WidgetSync(api(), platform: DelayedWidgetPlatform());
+    for (final caps in <List<String>>[
+      [],
+      ['power'],
+      ['light'],
+      ['light', 'brightness', 'rgb', 'audio', 'volume']
+    ]) {
+      final d = Device.fromJson({
+        'id': 1,
+        'serial_number': 'TEST',
+        'status': 'ONLINE',
+        'online': true,
+        'smart_home': {'capabilities': caps}
+      });
+      final row = (sync.snapshot([d])['devices'] as List).single as Map;
+      expect(
+          row['can_control'], caps.contains('light') || caps.contains('power'));
+      expect(row['supports_audio'], caps.contains('audio'));
+      expect(row['supports_brightness'], caps.contains('brightness'));
+      expect(row['supports_rgb'], caps.contains('rgb'));
+      expect(row['supports_volume'], caps.contains('volume'));
+    }
+  });
+
   test("Native widget clear failure does not block app logout", () async {
     final platform = DelayedWidgetPlatform()..failClear = true;
     final sync = WidgetSync(api(), platform: platform);
@@ -78,7 +103,10 @@ void main() {
       'id': 1,
       'serial_number': 'CLOUD',
       'online': true,
-      'status': 'RESET_PENDING'
+      'status': 'RESET_PENDING',
+      'smart_home': {
+        'capabilities': ['power', 'light']
+      }
     });
     expect(await sync.publish([device]), isTrue);
     final snapshot = platform.saved!['snapshot'] as Map;

@@ -2,6 +2,14 @@
 
 One Flutter codebase for Android, iOS, and Web.
 
+## Device controls and Configuration
+
+Version 0.10.0 keeps everyday controls on the device page and moves rename,
+Information, Location, Wi-Fi and removal into the bottom Configuration entry.
+Color, brightness, music and volume appear only for models supporting them.
+Admin-managed model features and backend deployment requirements are documented
+in [Model features and Configuration](../docs/model-features-and-configuration.md).
+
 ## Implemented
 
 - User registration

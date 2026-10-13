@@ -21,6 +21,7 @@ from app.schemas.device import (
     VolumeCommand,
 )
 from app.services.mqtt_service import mqtt_service
+from app.services.device_features import associated_model, effective_capabilities, require_features, light_payload
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 from app.api.device_operations import locked_device, current_identity
@@ -89,6 +90,11 @@ def serialize_device(device: Device, db: Session | None = None):
                             )
                         ).all()
                     )
+
+    if db is not None:
+        model = associated_model(db, device)
+        smart_home['model_key'] = model.key if model else None
+        smart_home['capabilities'] = effective_capabilities(db, device)
 
     return {
         "id": device.id,
@@ -332,17 +338,21 @@ def set_light(
 
     from app.api.device_operations import require_mutable
     require_mutable(device)
-    device.light_on = payload.enabled
-    device.brightness = payload.brightness
-    device.color_r = payload.r
-    device.color_g = payload.g
-    device.color_b = payload.b
+    fields = payload.model_dump(exclude_unset=True)
+    if any(value is None for value in fields.values()):
+        raise HTTPException(422, 'Light fields cannot be null')
+    command = light_payload(db, device, fields)
+    device.light_on = command['enabled']
+    device.brightness = command['brightness']
+    device.color_r = command['r']
+    device.color_g = command['g']
+    device.color_b = command['b']
     from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
         {
             "type": "light",
-            "payload": payload.model_dump(),
+            "payload": command,
         },
         generation=device_generation(db,device),
     )
@@ -369,6 +379,7 @@ def audio_play(
 
     from app.api.device_operations import require_mutable
     require_mutable(device)
+    require_features(db, device, 'audio')
     from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
@@ -395,6 +406,7 @@ def audio_stop(
 
     from app.api.device_operations import require_mutable
     require_mutable(device)
+    require_features(db, device, 'audio')
     from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(
         device.serial_number,
@@ -422,6 +434,7 @@ def set_volume(
 
     from app.api.device_operations import require_mutable
     require_mutable(device)
+    require_features(db, device, 'volume')
     device.volume = payload.volume
     from app.api.device_operations import device_generation
     delivered = mqtt_service.publish_command(

@@ -23,7 +23,8 @@ class _MusicScreenState extends State<MusicScreen> {
     final audioDevices = state.devices.where((d) => d.supportsAudio).toList();
     if (audioDevices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add an audio-capable Lily device first.')),
+        const SnackBar(
+            content: Text('Add an audio-capable Lily device first.')),
       );
       return;
     }
@@ -40,13 +41,20 @@ class _MusicScreenState extends State<MusicScreen> {
               content: DropdownButtonFormField<int>(
                 value: value,
                 items: audioDevices
-                    .map((d) => DropdownMenuItem(value: d.id, child: Text(d.displayName)))
+                    .map((d) => DropdownMenuItem(
+                        value: d.id, child: Text(d.displayName)))
                     .toList(),
-                onChanged: (v) { if (v != null) setLocalState(() => value = v); },
+                onChanged: (v) {
+                  if (v != null) setLocalState(() => value = v);
+                },
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                FilledButton(onPressed: () => Navigator.pop(context, value), child: const Text('Continue')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, value),
+                    child: const Text('Continue')),
               ],
             ),
           );
@@ -101,13 +109,13 @@ class _MusicScreenState extends State<MusicScreen> {
       if (!isCurrentSession()) return;
 
       await state.api.setDeviceState(targetDevice.id, {
-        ...targetDevice.genericState,
         'current_track_title': track.title,
       });
       if (!isCurrentSession()) return;
       await state.refresh();
       if (!isCurrentSession()) return;
-      setState(() => status = '${track.title} installed on ${targetDevice.displayName}.');
+      setState(() =>
+          status = '${track.title} installed on ${targetDevice.displayName}.');
     } catch (e) {
       if (isCurrentSession()) setState(() => status = e.toString());
     } finally {
@@ -119,6 +127,7 @@ class _MusicScreenState extends State<MusicScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
 
+    final hasAudioDevice = state.devices.any((d) => d.supportsAudio);
     return RefreshIndicator(
       onRefresh: state.refresh,
       child: ListView(
@@ -135,6 +144,11 @@ class _MusicScreenState extends State<MusicScreen> {
             'Choose one sound to store on your Lily device.',
             style: TextStyle(color: Colors.grey.shade600),
           ),
+          if (!hasAudioDevice)
+            const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child:
+                    Text('Add an audio-capable Lily device to install music.')),
           if (status != null) ...[
             const SizedBox(height: 12),
             Card(
@@ -160,7 +174,9 @@ class _MusicScreenState extends State<MusicScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: FilledButton.tonal(
-                  onPressed: busy ? null : () => installTrack(track),
+                  onPressed: busy || !hasAudioDevice
+                      ? null
+                      : () => installTrack(track),
                   child: const Text('Install'),
                 ),
               ),

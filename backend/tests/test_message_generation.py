@@ -8,6 +8,13 @@ def test_owned_controls_and_schedules_capture_generation(client,db,owner,monkeyp
     from app.services.mqtt_service import mqtt_service
     device=Device(serial_number='GEN-TEST',secret_hash=hash_password('factory-secret'),owner_id=owner[0].id,lifecycle_status='ACTIVE',model='test')
     db.add(device);db.flush();db.add(DeviceIdentity(device_id=device.id,generation=7,protocol_version=1,receipt_public_key='unused'));db.commit()
+    from app.models.smart_device import DeviceProfile, DeviceType, DeviceTypeCapability
+    dtype = DeviceType(key='generation_light', name='Generation Light')
+    db.add(dtype); db.flush()
+    db.add(DeviceProfile(device_id=device.id, device_type_id=dtype.id))
+    for capability in ('power','light','brightness','rgb'):
+        db.add(DeviceTypeCapability(device_type_id=dtype.id, capability=capability))
+    db.commit()
     messages=[]
     monkeypatch.setattr(mqtt_service,'started',True)
     monkeypatch.setattr(mqtt_service.client,'publish',lambda topic,payload,**kwargs:(messages.append((topic,json.loads(payload))) or SimpleNamespace(rc=0)))
