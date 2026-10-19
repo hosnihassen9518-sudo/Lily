@@ -49,6 +49,8 @@ def create_inventory(db, type_id: int, model_key: str):
         'DEVICE_RECEIPT_PRIVATE_KEY': private_pem(device_key),
     }
     pins = {'LED_PIN': 18} if dtype.key == 'test_light' else {'RGB_PIN': 4, 'I2S_BCLK_PIN': 12, 'I2S_LRC_PIN': 13, 'I2S_DOUT_PIN': 14, 'MIC_BCLK_PIN': 15, 'MIC_WS_PIN': 16, 'MIC_DATA_PIN': 17}
+    if model_key == "lily_led_strip":
+        pins.update(LED_COUNT=5, LILY_LED_STRIP=1)
     values.update(pins)
     header = '#pragma once\n\n' + '\n'.join('#define ' + key + ' ' + (str(value) if isinstance(value, int) else c_string(value)) for key, value in values.items()) + '\n'
     from app.services.provisioning_archive import archive_config
@@ -62,13 +64,15 @@ def seed_models(db):
     for key, name, type_key, target in (
         ('lily_v1', 'LILY-V1', 'lily_audio_light', 'esp32_device'),
         ('lily_test_light', 'Lily Test Light', 'test_light', 'esp32_test_light'),
+        ('lily_led_strip', 'Lily LED Strip', 'test_light', 'esp32_test_light'),
     ):
         dtype = db.scalar(select(DeviceType).where(DeviceType.key == type_key))
         if dtype is None:
             dtype = DeviceType(key=type_key, name=name)
             db.add(dtype); db.flush()
         if db.get(DeviceModel, key) is None:
-            db.add(DeviceModel(key=key, name=name, device_type_id=dtype.id, firmware_target=target))
+            db.add(DeviceModel(key=key, name=name, device_type_id=dtype.id, firmware_target=target,
+                               capabilities=["power", "light", "brightness", "rgb"] if key == "lily_led_strip" else None))
     if db.get(AppSetting, 'mobile_session_months') is None:
         db.add(AppSetting(key='mobile_session_months', value_json={'months': 3}))
     db.flush()

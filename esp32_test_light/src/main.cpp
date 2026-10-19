@@ -7,6 +7,13 @@
 #include <time.h>
 
 #include "device_config.h"
+#ifdef LILY_LED_STRIP
+#include <Adafruit_NeoPixel.h>
+#ifndef LED_COUNT
+#define LED_COUNT 5
+#endif
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+#endif
 #include "device_lifecycle.h"
 #include "device_message_rules.h"
 #include "wifi_transaction.h"
@@ -31,6 +38,8 @@ String homeSsid;
 String homePassword;
 String pairingToken;
 bool lightEnabled = false;
+int lightBrightness = 100;
+int lightR = 255, lightG = 255, lightB = 255;
 unsigned long lastHeartbeat = 0;
 unsigned long lastScheduleCheck = 0;
 unsigned long lastReconnectAttempt = 0;
@@ -40,8 +49,28 @@ String topic(const char* suffix) {
 }
 
 void applyLight() {
+#ifdef LILY_LED_STRIP
+  // Scale the stored RGB values each time so brightness changes do not lose color.
+  const int level = lightEnabled ? lightBrightness : 0;
+  strip.fill(strip.Color(lightR * level / 100, lightG * level / 100, lightB * level / 100));
+  strip.show();
+  Serial.printf("Strip: %s brightness=%d rgb=%d,%d,%d pixels=%d GPIO%d\n",
+                lightEnabled ? "ON" : "OFF", lightBrightness, lightR, lightG, lightB, LED_COUNT, LED_PIN);
+#else
   digitalWrite(LED_PIN, lightEnabled ? HIGH : LOW);
   Serial.printf("LED GPIO%d: %s\n", LED_PIN, lightEnabled ? "ON" : "OFF");
+#endif
+}
+
+void updateLight(JsonObjectConst payload) {
+  if (payload["enabled"].is<bool>()) lightEnabled = payload["enabled"].as<bool>();
+#ifdef LILY_LED_STRIP
+  if (payload["brightness"].is<int>()) lightBrightness = constrain(payload["brightness"].as<int>(), 0, 100);
+  if (payload["r"].is<int>()) lightR = constrain(payload["r"].as<int>(), 0, 255);
+  if (payload["g"].is<int>()) lightG = constrain(payload["g"].as<int>(), 0, 255);
+  if (payload["b"].is<int>()) lightB = constrain(payload["b"].as<int>(), 0, 255);
+#endif
+  applyLight();
 }
 
 bool saveConfig(const String& ssid, const String& password) {
@@ -117,10 +146,10 @@ void publishState() {
   if(deviceManagementSupported())doc["generation"]=deviceGeneration();
   JsonObject light = doc["light"].to<JsonObject>();
   light["enabled"] = lightEnabled;
-  light["brightness"] = 100;
-  light["r"] = 255;
-  light["g"] = 255;
-  light["b"] = 255;
+  light["brightness"] = lightBrightness;
+  light["r"] = lightR;
+  light["g"] = lightG;
+  light["b"] = lightB;
 
   String payload;
   serializeJson(doc, payload);
@@ -152,12 +181,8 @@ void handleCommand(const JsonDocument& doc) {
 
   // Existing V0.6 DeviceCard/DeviceScreen sends this form through /devices/{id}/light.
   if (type == "light") {
-    JsonObjectConst payload = doc["payload"];
-    if (!payload["enabled"].isNull()) {
-      lightEnabled = payload["enabled"].as<bool>();
-      applyLight();
-      publishState();
-    }
+    updateLight(doc["payload"].as<JsonObjectConst>());
+    publishState();
     return;
   }
 
@@ -237,8 +262,8 @@ String executedScheduleIds = "";
 
 void applyScheduleAction(JsonObjectConst action) {
   if (!action["light"]["enabled"].is<bool>()) return;
-  lightEnabled = action["light"]["enabled"].as<bool>();
-  applyLight(); publishState();
+  updateLight(action["light"].as<JsonObjectConst>());
+  publishState();
   Serial.println("Scheduled light action executed");
 }
 
@@ -386,7 +411,11 @@ void setup() {
   delay(500);
   Serial.printf("Lily boot: reset_reason=%d / heap=%lu / firmware=%s\n", (int)esp_reset_reason(), (unsigned long)ESP.getFreeHeap(), FIRMWARE_VERSION);
 
+#ifdef LILY_LED_STRIP
+  strip.begin();
+#else
   pinMode(LED_PIN, OUTPUT);
+#endif
   lightEnabled = false;
   applyLight();
 

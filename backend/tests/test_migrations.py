@@ -19,4 +19,4 @@ def test_catalog_seeds_only_supported_models(db):
     from app.services.device_inventory import seed_models
     from app.models.device_lifecycle import DeviceModel
     seed_models(db); seed_models(db)
-    assert set(db.scalars(select(DeviceModel.key))) == {'lily_v1', 'lily_test_light'}
+    assert set(db.scalars(select(DeviceModel.key))) == {'lily_v1', 'lily_test_light', 'lily_led_strip'}

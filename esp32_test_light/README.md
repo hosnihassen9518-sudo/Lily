@@ -35,3 +35,31 @@ The backend assigns device type `test_light` with capabilities `power` + `light`
 ## Device lifecycle and session policy
 
 See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).
+
+## Five-pixel WS2812B strip version (ESP32-S3 N16R8)
+
+Build/upload this variant with:
+
+```powershell
+platformio run -d esp32_test_light -e led_strip -t upload --upload-port COM7
+```
+
+The `led_strip` environment selects five GRB WS2812B pixels, GPIO18 from
+`device_config.h`, 16 MB flash, and octal PSRAM for N16R8 boards. It shares Lily
+pairing, lifecycle, MQTT, and schedules with the ordinary test light. All five
+pixels show the same RGB color and brightness. Off sends black while retaining
+the chosen RGB and brightness in RAM; reboot starts off with white selected.
+
+Wire GPIO18 through a 330–470 ohm resistor to the strip's DIN, use 5 V for strip
+power, and connect strip GND, power supply GND, and ESP32 GND together. A 1000 uF
+capacitor across strip 5 V/GND is recommended (observe polarity). Use a suitable
+3.3 V to 5 V data level shifter if required by the strip. Never connect 5 V to a
+GPIO. Five pixels can draw about 300 mA at full white, in addition to the board.
+
+The new `lily_led_strip` factory model has power/light/brightness/RGB capabilities.
+It uses the `test_light` protocol and `esp32_test_light` target with the
+`led_strip` environment. New generated strip headers also define `LILY_LED_STRIP`
+and `LED_COUNT`, so the default environment can build them. Existing paired test
+boards retain their inventory identity; their catalog model must have brightness
+and RGB enabled in the portal before those controls appear in the mobile app.
+The ordinary test-light model and firmware remain available.
