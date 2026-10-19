@@ -68,3 +68,7 @@ ChangeThisAdminPassword!
 ## Device lifecycle and session policy
 
 See [0.8.0 provisioning, login duration, Wi-Fi changes, and account reset](../docs/device-lifecycle-and-session-policy.md).
+
+## Version 0.9.0 access control
+
+See [../docs/access-control.md](../docs/access-control.md) for RBAC, sessions, API access, rate limits and upgrade instructions.

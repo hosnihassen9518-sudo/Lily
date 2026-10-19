@@ -1,0 +1,21 @@
+# Replace lily.example.com and the upstreams for your installation.
+# Keep backend port 6100 reachable only from the trusted LAN/proxy.
+lily.example.com {
+    @device_runtime path /api/v1/device-runtime/* /api/v1/devices/activate
+    respond @device_runtime 404
+    handle /api/v1/* {
+        reverse_proxy 127.0.0.1:6100
+    }
+    handle /health {
+        reverse_proxy 127.0.0.1:6100
+    }
+    handle /openapi.json {
+        reverse_proxy 127.0.0.1:6100
+    }
+    handle /docs* {
+        reverse_proxy 127.0.0.1:6100
+    }
+    handle {
+        reverse_proxy 127.0.0.1:6080
+    }
+}

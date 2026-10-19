@@ -77,3 +77,7 @@ V0.6 adds room-grouped device widgets, capability-aware device controls, respons
 ## V0.6.1 test-light
 
 For the first physical integration test, use `esp32_test_light/`. It is based on the V0.6 provisioning/MQTT flow and drives one normal LED through GPIO18. See `docs/v0.6.1-test-light.md`.
+
+## Version 0.9.0 access control
+
+See [docs/access-control.md](docs/access-control.md) for RBAC, sessions, API access, rate limits and upgrade instructions.
