@@ -58,3 +58,17 @@ def test_legacy_multi_role_sessions_are_revoked_and_login_blocked(db):
     with pytest.raises(HTTPException): issue_session(db, user)
     assign_roles(db, user.id, ["read_only"]); db.commit()
     assert issue_session(db, user)["access_token"]
+
+
+def test_upgrade_preserves_existing_superuser_with_extra_role(db):
+    from app.services.rbac import seed_access_control, assign_roles, roles_for
+    from app.models.access_control import RoleAssignment
+    from app.services.access_sessions import issue_session
+    seed_access_control(db)
+    user = User(email="mainadmin@test.org", password_hash="unused", is_admin=True)
+    db.add(user); db.flush()
+    assign_roles(db, user.id, ["superuser"])
+    db.add(RoleAssignment(user_id=user.id, role_key="administrator")); db.commit()
+    seed_access_control(db); db.commit()
+    assert [role.key for role in roles_for(db, user.id)] == ["superuser"]
+    assert issue_session(db, user)["access_token"]

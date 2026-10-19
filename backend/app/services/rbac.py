@@ -63,7 +63,15 @@ def seed_access_control(db):
     from sqlalchemy import func
     conflicts = list(db.scalars(select(RoleAssignment.user_id).group_by(RoleAssignment.user_id).having(func.count() > 1)))
     for uid in conflicts:
+        # Superuser already includes every grant; removing extra assignments
+        # preserves existing authority while satisfying the single-role rule.
+        if superuser(db, uid) and not db.get(ServicePrincipal, uid):
+            db.execute(delete(RoleAssignment).where(
+                RoleAssignment.user_id == uid, RoleAssignment.role_key != "superuser"))
+            from app.services.access_audit import audit
+            audit(db, uid, "roles.single_role_upgrade", uid)
         revoke_principal_sessions(db, uid)
+    db.flush()
 
 
 def edit_role(db, key, values):

@@ -129,3 +129,5 @@ Administrator has all operational device permissions, including provisioning, fa
 Devices support PATCH /api/v1/devices/admin/{id}/model with model_key, guarded by devices.change and resource access. It accepts compatible firmware targets and hardware revisions, updates the model/type association, preserves credentials and ownership, and audits the change. It does not reflash firmware or rewrite the archived factory configuration. Fresh inventory accepts an optional name.
 
 Role assignment and account/credential creation reject multiple roles. Existing conflicting assignments are preserved for superuser correction; their sessions are revoked on startup and new login is blocked until one role is selected. Removing the last active superuser remains prohibited.
+
+Upgrade recovery: existing portal Superusers with extra roles retain only Superuser automatically, with an audit event and session revocation. This preserves their existing full authority. Other conflicting assignments require explicit correction. Offline recovery remains available via python -m app.services.rbac_recovery --email ACCOUNT_EMAIL.
