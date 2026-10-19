@@ -110,6 +110,7 @@ POLICIES = {
         "user_roles": "roles.assign",
         "ceiling": "delegation.change",
         "user_active": "users.change",
+        "reset_user_password": "users.change",
         "credentials": "api_credentials.read",
         "new_credential": "api_credentials.create",
         "credential_roles": "api_roles.assign",

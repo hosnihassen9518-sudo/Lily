@@ -374,3 +374,26 @@ def test_mobile_users_cannot_manage_each_others_sessions(client, db):
     )
     assert client.get("/api/v1/access/sessions", headers=headers).status_code == 200
     assert validate_session(db, b["access_token"])
+
+
+def test_superuser_password_reset_revokes_sessions(client, db, admin):
+    from app.core.security import verify_password
+    target, headers = identity(db, "reset_target", ["devices.read"])
+    response = client.post(f"/api/v1/access/users/{target.id}/password", headers=admin,
+                           json={"password": "New-test-password-2026"})
+    assert response.status_code == 200
+    db.refresh(target)
+    assert verify_password("New-test-password-2026", target.password_hash)
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
+def test_non_superuser_cannot_reset_password(client, db):
+    actor, headers = identity(db, "reset_actor", ["users.change"])
+    assert client.post(f"/api/v1/access/users/{actor.id}/password", headers=headers,
+                       json={"password": "New-test-password-2026"}).status_code == 403
+
+
+def test_password_reset_rejects_long_utf8(client, db, admin):
+    target, _ = identity(db, "reset_unicode", ["devices.read"])
+    assert client.post(f"/api/v1/access/users/{target.id}/password", headers=admin,
+                       json={"password": chr(30028) * 30}).status_code == 422

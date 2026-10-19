@@ -169,6 +169,7 @@ def me(user: User = Depends(get_current_user)):
         "last_name": user.last_name,
         "is_admin": user._access.auth_method == "portal" and bool(db_role_keys(user)),
         "permissions": sorted(user._access.permissions),
+        "roles": list(db_role_keys(user)),
         "session_id": user._access.session_id,
         "auth_method": user._access.auth_method,
     }

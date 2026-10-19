@@ -45,6 +45,7 @@ from app.services.api_credentials import (
     revoke_credential,
 )
 from app.services.permission_catalog import RESOURCE_ACTIONS
+from app.schemas.access_control import PasswordReset
 from app.core.security import hash_password
 
 router = APIRouter(prefix="/access", tags=["access control"])
@@ -572,3 +573,25 @@ def set_rate_settings(
     audit(db, user.id, "settings.change", "rate-limits")
     db.commit()
     return payload
+
+
+@router.post("/users/{user_id}/password")
+def reset_user_password(
+    user_id: int,
+    payload: PasswordReset,
+    user: User = Depends(require_permission("users.change")),
+    db: Session = Depends(get_db),
+):
+    lock_security(db)
+    if not superuser(db, user.id):
+        raise HTTPException(403, "Superuser required")
+    target = db.get(User, user_id)
+    if not target or db.get(ServicePrincipal, user_id):
+        raise HTTPException(404, "Account not found")
+    if len(payload.password.encode("utf-8")) > 72:
+        raise HTTPException(422, "Password must not exceed 72 UTF-8 bytes")
+    target.password_hash = hash_password(payload.password)
+    revoke_principal_sessions(db, user_id)
+    audit(db, user.id, "users.password_reset", user_id)
+    db.commit()
+    return {"ok": True}

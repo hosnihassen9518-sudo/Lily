@@ -132,14 +132,14 @@ export default function App() {
             </PermissionGate>
           }
         />
-        <Route
-          path="settings"
-          element={
-            <PermissionGate permission="settings.read" denial>
-              <SettingsPage />
-            </PermissionGate>
-          }
-        />
+        <Route path="settings" element={<SettingsPage />}>
+          <Route path="administrators" element={<PermissionGate permission="users.read" denial><UsersPage/></PermissionGate>}/>
+          <Route path="roles" element={<PermissionGate permission="roles.read" denial><RolesPage/></PermissionGate>}/>
+          <Route path="api-roles" element={<PermissionGate permission="api_roles.read" denial><RolesPage audience="api"/></PermissionGate>}/>
+          <Route path="api-access" element={<PermissionGate permission="api_credentials.read" denial><ApiAccessPage/></PermissionGate>}/>
+          <Route path="sessions" element={<SessionsPage/>}/>
+          <Route path="audit" element={<PermissionGate permission="audit.read" denial><AuditPage/></PermissionGate>}/>
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

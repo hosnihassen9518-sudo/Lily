@@ -51,3 +51,7 @@ class CredentialInput(Strict):
 
 class Exchange(Strict):
     credential: str = Field(min_length=40, max_length=180)
+
+
+class PasswordReset(Strict):
+    password: str = Field(min_length=12, max_length=72)

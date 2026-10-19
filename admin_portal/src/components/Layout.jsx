@@ -20,7 +20,6 @@ const items = [
   { to: "/devices", label: "Devices", icon: Cpu },
   { to: "/inventory", label: "Inventory", icon: Cpu },
   { to: "/device-types", label: "Models & features", icon: Shapes },
-  { to: "/users", label: "Users", icon: Users },
   { to: "/music", label: "Music", icon: Music2 },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
@@ -47,17 +46,10 @@ export default function Layout() {
         </div>
 
         <nav className="nav-list">
-          {[
-            ...items,
-            { to: "/roles", label: "Roles", icon: Shapes },
-            { to: "/api-roles", label: "API roles", icon: Shapes },
-            { to: "/api-access", label: "API access", icon: Cpu },
-            { to: "/sessions", label: "Sessions", icon: Users },
-            { to: "/audit", label: "Audit log", icon: LayoutDashboard },
-          ]
+          {items
             .filter(
               (item) =>
-                item.to === "/sessions" ||
+                item.to === "/settings" ||
                 can(
                   {
                     "/": "dashboard.read",

@@ -1,3 +1,5 @@
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import PermissionGate from "../components/PermissionGate";
 import RateLimits from "./RateLimits";
 import React, { useEffect, useState } from "react";
@@ -65,10 +67,23 @@ function SessionSettings() {
 }
 
 export default function SettingsPage() {
-  return (
-    <>
-      <SessionSettings />
-      <RateLimits />
-    </>
-  );
+  const {can} = useAuth();
+  const location = useLocation();
+  const sections = [
+    ["administrators", "Administrators", "users.read"],
+    ["roles", "Roles", "roles.read"],
+    ["api-roles", "API Roles", "api_roles.read"],
+    ["api-access", "API Access", "api_credentials.read"],
+    ["sessions", "Sessions", null],
+    ["audit", "Audit", "audit.read"],
+  ];
+  return <>
+    <nav aria-label="Settings sections" className="access-actions" style={{flexWrap:"wrap", marginBottom:20}}>
+      {can("settings.read") && <NavLink className="secondary-button" to="/settings" end>General</NavLink>}
+      {sections.filter(([, ,permission]) => !permission || can(permission)).map(([path,label]) =>
+        <NavLink key={path} className={({isActive}) => isActive ? "primary-button" : "secondary-button"} to={`/settings/${path}`}>{label}</NavLink>)}
+    </nav>
+    {location.pathname.replace(/\/$/, "") === "/settings" ?
+      (can("settings.read") ? <><SessionSettings/><RateLimits/></> : <p>Select a settings section.</p>) : <Outlet/>}
+  </>;
 }

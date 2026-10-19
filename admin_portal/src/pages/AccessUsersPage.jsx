@@ -3,7 +3,8 @@ import { api } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import PermissionMatrix from "../components/PermissionMatrix";
 export default function AccessUsersPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const [reset, setReset] = useState(null);
   const [users, setUsers] = useState([]),
     [roles, setRoles] = useState([]),
     [catalog, setCatalog] = useState({}),
@@ -70,7 +71,7 @@ export default function AccessUsersPage() {
     <>
       <div className="page-heading">
         <div>
-          <h1>Users & administrators</h1>
+          <h1>Administrators</h1>
           <p>Assign roles and manage account access.</p>
         </div>
         {can("users.create") && (
@@ -112,6 +113,7 @@ export default function AccessUsersPage() {
                   <td>{u.roles.join(", ") || "Mobile user"}</td>
                   <td>{u.active ? "Active" : "Disabled"}</td>
                   <td>
+                    {user?.roles?.includes("superuser") && <button className="secondary-button" onClick={() => setReset({id:u.id,email:u.email,password:""})}>Reset password for {u.email}</button>}
                     {can("roles.assign") && (
                       <button
                         className="secondary-button"
@@ -144,6 +146,13 @@ export default function AccessUsersPage() {
           </table>
         </div>
       )}
+      {reset && <section className="panel"><h2>Reset password for {reset.email}</h2>
+        <p>All sessions for this account will be revoked.</p>
+        <form className="form-grid" onSubmit={e => {e.preventDefault(); run(async () => {await api.access(`/access/users/${reset.id}/password`, "POST", {password:reset.password}); setReset(null);});}}>
+          <label>New password<input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={reset.password} onChange={e=>setReset({...reset,password:e.target.value})}/></label>
+          <button className="primary-button" disabled={busy}>Reset password</button>
+          <button type="button" className="secondary-button" onClick={()=>setReset(null)}>Cancel</button>
+        </form></section>}
       {draft && (
         <section className="panel access-panel">
           <h2>Create account</h2>
