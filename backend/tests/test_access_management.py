@@ -232,3 +232,145 @@ def test_parallel_demotion_preserves_one_superuser(tmp_path):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(demote, ids))
     assert sorted(results) == [200, 409]
+
+
+def test_audit_survives_real_dependency_session_cleanup(client, db):
+    from app.main import app
+    from app.db.session import get_db
+    from sqlalchemy.orm import Session
+
+    user, headers = identity(db, "closing_reader", ["devices.read"])
+
+    def closing_db():
+        with Session(db.bind) as session:
+            yield session
+
+    original = app.dependency_overrides[get_db]
+    app.dependency_overrides[get_db] = closing_db
+    try:
+        result = client.post(
+            "/api/v1/access/api-roles",
+            headers=headers,
+            json={"key": "denied_closing", "name": "Denied", "permissions": []},
+        )
+        assert result.status_code == 403
+    finally:
+        app.dependency_overrides[get_db] = original
+
+
+def test_device_admin_route_cannot_bypass_owned_scope(client, db):
+    from app.models.device import Device
+
+    actor, headers = identity(
+        db, "device_editor", ["devices.change", "devices.delete", "devices.read"]
+    )
+    other = User(email="another-owner@test.org", password_hash="unused")
+    db.add(other)
+    db.flush()
+    device = Device(
+        serial_number="OTHER-OWNER", secret_hash="unused", owner_id=other.id
+    )
+    db.add(device)
+    db.commit()
+    assert (
+        client.patch(
+            f"/api/v1/devices/admin/{device.id}/disabled",
+            headers=headers,
+            json={"disabled": True},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(f"/api/v1/devices/admin/{device.id}", headers=headers).status_code
+        == 404
+    )
+    assert client.get("/api/v1/devices/admin/all", headers=headers).json() == []
+
+
+def test_inventory_create_does_not_grant_secret_export(
+    client, db, tmp_path, monkeypatch
+):
+    from app.models.device_lifecycle import DeviceModel
+    from app.services.device_inventory import seed_models
+    from app.core.config import settings
+
+    seed_models(db)
+    monkeypatch.setattr(settings, "device_signing_key_file", str(tmp_path / "key.pem"))
+    actor, headers = identity(db, "inventory_creator", ["inventory.create"])
+    model = db.get(DeviceModel, "lily_test_light")
+    result = client.post(
+        "/api/v1/admin/device-inventory",
+        headers=headers,
+        json={"device_type_id": model.device_type_id, "model_key": model.key},
+    )
+    assert result.status_code == 200
+    assert "device_secret" not in result.json() and "config_header" not in result.json()
+
+
+def test_predefined_operator_excludes_accounts_and_security_settings(db):
+    from app.services.permission_catalog import PREDEFINED_ROLES
+
+    for key in ("operator", "read_only"):
+        assert "users.read" not in PREDEFINED_ROLES[key][1]
+        assert "settings.read" not in PREDEFINED_ROLES[key][1]
+
+
+def test_pairing_token_is_revoked_with_its_parent_session(client, db, owner):
+    from app.models.device import Device
+    from app.core.security import hash_password
+
+    token = client.post("/api/v1/devices/pairing-session", headers=owner[1]).json()[
+        "pairing_token"
+    ]
+    device = Device(
+        serial_number="PARENT-PAIR", secret_hash=hash_password("factory-secret")
+    )
+    db.add(device)
+    db.commit()
+    assert (
+        client.post(
+            f"/api/v1/access/users/{owner[0].id}/revoke-sessions", headers=owner[1]
+        ).status_code
+        == 200
+    )
+    response = client.post(
+        "/api/v1/devices/activate",
+        json={
+            "serial_number": device.serial_number,
+            "device_secret": "factory-secret",
+            "pairing_token": token,
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_mobile_users_cannot_manage_each_others_sessions(client, db):
+    from app.services.mobile_sessions import issue_mobile_session
+
+    alice = User(email="alice-mobile@test.org", password_hash="unused")
+    bob = User(email="bob-mobile@test.org", password_hash="unused")
+    db.add_all([alice, bob])
+    db.commit()
+    a = issue_mobile_session(db, alice)
+    b = issue_mobile_session(db, bob)
+    headers = {"Authorization": "Bearer " + a["access_token"]}
+    assert (
+        client.get(
+            f"/api/v1/access/sessions?user_id={bob.id}", headers=headers
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/v1/access/users/{bob.id}/revoke-sessions", headers=headers
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/access/sessions/{b['session_id']}", headers=headers
+        ).status_code
+        == 403
+    )
+    assert client.get("/api/v1/access/sessions", headers=headers).status_code == 200
+    assert validate_session(db, b["access_token"])

@@ -138,3 +138,68 @@ def test_owner_delegation_does_not_survive_device_transfer(db):
     device.owner_id = None
     db.commit()
     assert not can_access_device(db, context.principal, device)
+
+
+def test_issuer_revocation_reaches_descendant_service_sessions(db):
+    from app.models.access_control import ServicePrincipal
+    from app.services.access_sessions import issue_session
+
+    root = User(email="root-chain@test.org", password_hash="unused")
+    first = User(email="first-chain@test.org", password_hash="unused")
+    second = User(email="second-chain@test.org", password_hash="unused")
+    db.add_all([root, first, second])
+    db.flush()
+    db.add_all(
+        [
+            ServicePrincipal(
+                user_id=first.id, issuer_id=root.id, name="First", scope={}
+            ),
+            ServicePrincipal(
+                user_id=second.id, issuer_id=first.id, name="Second", scope={}
+            ),
+        ]
+    )
+    db.commit()
+    token = issue_session(db, second, auth_method="api", permissions=["devices.read"])[
+        "access_token"
+    ]
+    revoke_principal_sessions(db, root.id)
+    db.commit()
+    with pytest.raises(HTTPException):
+        validate_session(db, token)
+
+
+def test_api_issuer_cannot_broaden_its_resource_scope(db):
+    issuer, d1, d2, result, headers = setup(db)
+    grants = [
+        "devices.read",
+        "resources.all",
+        "api_credentials.create",
+        "api_roles.assign",
+    ]
+    db.add(Role(key="nested_issuer", name="Nested", audience="api", permissions=grants))
+    db.commit()
+    parent = create_credential(
+        db,
+        issuer,
+        "Parent",
+        ["nested_issuer"],
+        {"devices": [d1.id]},
+        datetime.now(timezone.utc) + timedelta(days=1),
+    )
+    context = validate_session(
+        db, exchange_credential(db, parent["secret"])["access_token"]
+    )
+    actor = context.principal
+    actor._access = context
+    db.add(GrantCeiling(user_id=actor.id, permissions=grants))
+    db.commit()
+    with pytest.raises(HTTPException):
+        create_credential(
+            db,
+            actor,
+            "Overbroad child",
+            ["nested_issuer"],
+            {"all": True},
+            datetime.now(timezone.utc) + timedelta(days=1),
+        )

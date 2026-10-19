@@ -32,7 +32,14 @@ def bootstrap():
         admin_user = db.scalar(
             select(User).where(User.email == settings.admin_email.lower())
         )
-        if not admin_user:
+        from app.models.device_lifecycle import AppSetting
+
+        if not admin_user and db.scalar(select(User.id).limit(1)) is not None:
+            if not db.get(AppSetting, "rbac_migrated"):
+                raise RuntimeError(
+                    "Existing installation has no matching bootstrap administrator; run python -m app.services.rbac_recovery --email <existing-active-admin>"
+                )
+        elif not admin_user:
             admin_user = User(
                 email=settings.admin_email.lower(),
                 password_hash=hash_password(settings.admin_password),
@@ -42,7 +49,9 @@ def bootstrap():
             db.add(admin_user)
             db.flush()
 
-        if not db.scalar(select(Home).where(Home.owner_id == admin_user.id)):
+        if admin_user and not db.scalar(
+            select(Home).where(Home.owner_id == admin_user.id)
+        ):
             db.add(
                 Home(owner_id=admin_user.id, name="Admin Home", timezone="Europe/Paris")
             )
@@ -176,13 +185,16 @@ async def audit_mutations(request, call_next):
         path = getattr(route, "path", "authenticated-action")
         if response.status_code >= 400:
             db.rollback()
-        audit(
-            db,
-            context.principal.id,
-            request.method + " " + path,
-            ":".join(str(v) for v in request.path_params.values()),
-            "success" if response.status_code < 400 else "denied",
-        )
-        db.commit()
+        from sqlalchemy.orm import Session
+
+        with Session(bind=request.state.audit_bind) as journal:
+            audit(
+                journal,
+                request.state.audit_actor_id,
+                request.method + " " + path,
+                ":".join(str(v) for v in request.path_params.values()),
+                "success" if response.status_code < 400 else "denied",
+            )
+            journal.commit()
     response.headers["Cache-Control"] = "no-store"
     return response

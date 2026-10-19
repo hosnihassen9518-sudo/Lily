@@ -15,6 +15,7 @@ from app.services.rbac import (
     assign_roles,
     authorize_grant,
     superuser,
+    revoke_principal_sessions,
     lock_security,
 )
 from app.services.mobile_sessions import utc
@@ -23,16 +24,33 @@ from app.services.access_audit import audit
 from app.services.permission_catalog import PERMISSIONS
 
 
-def issuer_ceiling(db, user):
+def issuer_ceiling(db, user, seen=None):
     if not user or not user.is_active:
         return set()
+    seen = set() if seen is None else seen
+    if user.id in seen:
+        return set()
+    seen.add(user.id)
     if superuser(db, user.id):
         return set(PERMISSIONS)
     ceiling = db.get(GrantCeiling, user.id)
     grants = effective_permissions(db, user.id)
     if "api_credentials.create" not in grants:
         return set()
-    return grants & set(ceiling.permissions if ceiling else [])
+    allowed = grants & set(ceiling.permissions if ceiling else [])
+    principal = db.get(ServicePrincipal, user.id)
+    if principal:
+        credential = db.scalar(
+            select(ApiCredential).where(ApiCredential.user_id == user.id)
+        )
+        if (
+            not credential
+            or credential.revoked_at
+            or utc(credential.expires_at) <= datetime.now(timezone.utc)
+        ):
+            return set()
+        allowed &= issuer_ceiling(db, db.get(User, principal.issuer_id), seen)
+    return allowed
 
 
 def create_credential(db, actor, name, role_keys, scope, expires_at, rate_limit=120):
@@ -46,6 +64,21 @@ def create_credential(db, actor, name, role_keys, scope, expires_at, rate_limit=
         raise HTTPException(422, "API roles required")
     grants = set().union(*(set(r.permissions) for r in roles))
     authorize_grant(db, actor, grants)
+    context = getattr(actor, "_access", None)
+    if context and context.auth_method == "api":
+        from app.services.access_sessions import can_access_device, can_access_home
+        from app.models.device import Device
+        from app.models.home import Home
+
+        if scope.get("all") and not context.scope.get("all"):
+            raise HTTPException(403, "Child scope exceeds issuer scope")
+        for did in scope.get("devices", []):
+            if not can_access_device(db, actor, db.get(Device, did)):
+                raise HTTPException(403, "Child device scope exceeds issuer scope")
+        for hid in scope.get("homes", []):
+            home = db.get(Home, hid)
+            if not home or not can_access_home(actor, home):
+                raise HTTPException(403, "Child home scope exceeds issuer scope")
     if scope.get("all") and "resources.all" not in issuer_ceiling(db, actor):
         raise HTTPException(403, "Global resource delegation required")
     # Resource-scoped delegation also requires ownership of each selected resource.
@@ -99,6 +132,7 @@ def revoke_credential(db, identifier):
     if not row:
         raise HTTPException(404, "Credential not found")
     row.revoked_at = datetime.now(timezone.utc)
+    revoke_principal_sessions(db, row.user_id)
     db.execute(
         update(AccessSession)
         .where(AccessSession.credential_id == identifier)

@@ -1,3 +1,4 @@
+import { useAuth } from "../context/AuthContext";
 import PermissionGate from "../components/PermissionGate";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -18,6 +19,7 @@ import Modal from "../components/Modal";
 import EmptyState from "../components/EmptyState";
 
 export default function DevicesPage({ inventoryOnly = false }) {
+  const { can } = useAuth();
   const [devices, setDevices] = useState([]);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -130,6 +132,12 @@ export default function DevicesPage({ inventoryOnly = false }) {
     }
   }
   useEffect(() => {
+    if (
+      !can("inventory.create") ||
+      !can("models.read") ||
+      !can("device_types.read")
+    )
+      return;
     Promise.all([api.deviceTypes(), api.deviceModels()])
       .then(([t, m]) => {
         setTypes(t);

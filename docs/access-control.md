@@ -13,13 +13,15 @@ Superuser includes every registered permission and explicit global resource scop
 superusers assign superuser status and set delegated grant ceilings. Other administrators
 must hold the relevant create/change/assign permission AND a superuser-defined grant ceiling.
 They cannot grant beyond their own rights or manage higher-privileged targets. The last
-active superuser cannot be disabled/demoted. API roles use a separate audience and explicit
+active superuser cannot be disabled/demoted. Operator and Read-only exclude account information and security settings.
+API roles use a separate audience and explicit
 api_roles.create/change/delete/assign permissions. Generic roles.create does not grant API-role
 administration. API credentials require api_credentials.create and api_roles.assign.
 
 Ordinary mobile users keep owned-resource access. Portal roles constrain mobile grants too.
 API clients receive explicit device/home IDs or explicitly global scope. Ownership-delegated
-access stops working if a resource leaves the issuer's ownership. Hardware capability checks,
+access stops working if a resource leaves the issuer's ownership. Issuer revocation propagates through descendant API principals, and
+child credential scopes cannot exceed their parent session's resource scope. Hardware capability checks,
 device generations and signed lifecycle messages remain required in addition to RBAC.
 
 ## Sessions
@@ -28,19 +30,22 @@ Permissions are snapshotted on login/exchange. Each request checks token signatu
 activity/expiry, required permission and resource scope; role membership is not reconstructed
 per request. Role changes, assignments, ceiling reductions, account disable and credential
 revocation revoke affected sessions transactionally. Role changes take effect through fresh
-login. A request already executing at the time of revocation may finish.
+login. Pairing tokens also depend on their active parent session; previously issued unbound
+pairing tokens must be regenerated after this upgrade. A request already executing at the time of revocation may finish.
 
 Portal sessions use ACCESS_TOKEN_EXPIRE_MINUTES (default 30). API sessions default to 15
 minutes and cannot outlive their credential. API sessions have no refresh token. Mobile
 refresh rotation stays intact and widgets depend on their parent mobile session. Session
 management permits self-revocation; managing others needs sessions.read/revoke plus proper
-delegation scope. Credential secrets and bearer tokens are never shown in session lists.
+delegation scope. Credential secrets and bearer tokens are never shown in session lists. Ordinary mobile
+users have self-service session access only, without delegated session-management grants.
 
 ## API authentication example
 
 1. In API roles, create a role such as devices.read and devices.control.
 2. In API access, create a named, expiring credential and choose its resource IDs.
-3. Save the secret once in your integration's secret store. Only its SHA-256 digest is stored.
+3. Save the secret once in your integration's secret store. Only its SHA-256 digest is stored. Inventory creation is separate from device-secret export;
+a creator without inventory.export_secrets receives metadata without secrets or config headers.
 4. Exchange over HTTPS:
 
 ```http

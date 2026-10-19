@@ -46,7 +46,6 @@ MOBILE_PERMISSIONS = frozenset(
         if p.split(".")[0]
         in {"devices", "homes", "rooms", "music", "schedules", "device_types"}
     }
-    | {"sessions.read", "sessions.revoke"}
 )
 PREDEFINED_ROLES = {
     "superuser": ("Superuser", sorted(PERMISSIONS)),
@@ -54,7 +53,11 @@ PREDEFINED_ROLES = {
     "operator": (
         "Operator",
         sorted(
-            {p for p in OPERATIONAL if p.endswith(".read")}
+            {
+                p
+                for p in OPERATIONAL
+                if p.endswith(".read") and p.split(".")[0] not in {"users", "settings"}
+            }
             | {
                 "devices.control",
                 "schedules.create",
@@ -63,5 +66,12 @@ PREDEFINED_ROLES = {
             }
         ),
     ),
-    "read_only": ("Read-only", sorted(p for p in OPERATIONAL if p.endswith(".read"))),
+    "read_only": (
+        "Read-only",
+        sorted(
+            p
+            for p in OPERATIONAL
+            if p.endswith(".read") and p.split(".")[0] not in {"users", "settings"}
+        ),
+    ),
 }

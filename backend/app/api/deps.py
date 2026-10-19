@@ -16,6 +16,8 @@ def get_current_user(
     context = validate_session(db, creds.credentials)
     request.state.access = context
     request.state.access_db = db
+    request.state.audit_actor_id = context.principal.id
+    request.state.audit_bind = db.get_bind()
     from app.services.route_policies import enforce_policy
     from app.services.rate_limits import session_limit
 

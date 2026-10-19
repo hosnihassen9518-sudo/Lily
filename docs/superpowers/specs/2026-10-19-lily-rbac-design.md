@@ -1,7 +1,7 @@
 # Lily v0.9.0: RBAC, revocable sessions, and managed API access
 
 Date: 2026-10-19
-Status: Design approved in chat; written specification awaiting review.
+Status: Written specification approved; implemented in v0.9.0, live deployment pending.
 Repository: D:/Projects/Lily/Lily
 
 ## Outcome and scope

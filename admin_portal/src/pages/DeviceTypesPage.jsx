@@ -1,8 +1,10 @@
+import { useAuth } from "../context/AuthContext";
 import PermissionGate from "../components/PermissionGate";
 import React, { useEffect, useState } from "react";
 import { api } from "../services/api";
 
 export default function DeviceTypesPage() {
+  const { can } = useAuth();
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -29,7 +31,7 @@ export default function DeviceTypesPage() {
     try {
       setError("");
       const [types, models, features] = await Promise.all([
-        api.deviceTypes(),
+        can("device_types.read") ? api.deviceTypes() : Promise.resolve([]),
         api.deviceModels(),
         api.deviceFeatures(),
       ]);
@@ -234,7 +236,7 @@ export default function DeviceTypesPage() {
               <option value="esp32_test_light">ESP32 test light</option>
             </select>
           </label>
-          <fieldset style={{ gridColumn: "1 / -1" }} disabled={busy || !ready}>
+          <fieldset style={{ gridColumn: "1 / -1" }} disabled={busy || !ready || !can(editing ? "models.change" : "models.create")}>
             <legend>Supported features</legend>
             <p>
               Light requires Power. Brightness and RGB require Light. Volume
@@ -262,7 +264,7 @@ export default function DeviceTypesPage() {
           <div>
             <button
               className="primary-button"
-              disabled={busy || !ready}
+              disabled={busy || !ready || !can(editing ? "models.change" : "models.create")}
               type="submit"
             >
               {busy ? "Saving…" : editing ? "Save model" : "Create model"}

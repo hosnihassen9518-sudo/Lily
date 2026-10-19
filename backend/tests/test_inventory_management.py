@@ -20,7 +20,10 @@ def generate(client,db,admin,monkeypatch,tmp_path):
 def test_missing_key_initializes_and_credentials_are_recoverable(client,db,admin,owner,monkeypatch,tmp_path):
     data,path=generate(client,db,admin,monkeypatch,tmp_path)
     key=path.read_bytes();device_id=data['device']['id']
-    assert path.stat().st_mode&0o777==0o600
+    import os
+    # Windows uses ACLs rather than POSIX permission bits; retain every recovery assertion.
+    if os.name != "nt":
+        assert path.stat().st_mode&0o777==0o600
     again=client.get(f'/api/v1/admin/device-inventory/{device_id}/credentials',headers=admin)
     assert again.status_code==200
     assert again.json()['device_secret']==data['device_secret']

@@ -159,3 +159,17 @@ def can_access_home(user, home):
     ):
         return False
     return bool(context.scope.get("all") or home.id in context.scope.get("homes", []))
+
+
+def can_manage_device(db, user, device, inventory_permission="inventory.read"):
+    if device is None:
+        return False
+    if can_access_device(db, user, device):
+        return True
+    context = getattr(user, "_access", None)
+    return bool(
+        device.owner_id is None
+        and context
+        and context.auth_method == "portal"
+        and inventory_permission in context.permissions
+    )

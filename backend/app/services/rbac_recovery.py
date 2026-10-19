@@ -4,7 +4,12 @@ import argparse
 from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.services.rbac import seed_access_control, lock_security, assign_roles
+from app.services.rbac import (
+    seed_access_control,
+    lock_security,
+    assign_roles,
+    roles_for,
+)
 
 
 def main():
@@ -21,6 +26,12 @@ def main():
         )
         if not user:
             raise SystemExit("An existing active account is required")
+        from app.models.device_lifecycle import AppSetting
+
+        if not db.get(AppSetting, "rbac_migrated"):
+            for existing in db.scalars(select(User).where(User.is_admin.is_(True))):
+                if not roles_for(db, existing.id):
+                    assign_roles(db, existing.id, ["administrator"])
         assign_roles(db, user.id, ["superuser"])
         user.is_admin = True
         from app.models.device_lifecycle import AppSetting

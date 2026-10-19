@@ -102,13 +102,22 @@ def protect_last_superuser(db, user_id):
 
 def revoke_principal_sessions(db, user_id):
     now = datetime.now(timezone.utc)
-    ids = [user_id] + list(
-        db.scalars(
-            select(ServicePrincipal.user_id).where(
-                ServicePrincipal.issuer_id == user_id
+    principals = {user_id}
+    frontier = {user_id}
+    while frontier:
+        children = (
+            set(
+                db.scalars(
+                    select(ServicePrincipal.user_id).where(
+                        ServicePrincipal.issuer_id.in_(frontier)
+                    )
+                )
             )
+            - principals
         )
-    )
+        principals.update(children)
+        frontier = children
+    ids = sorted(principals)
     db.execute(
         update(AccessSession)
         .where(AccessSession.user_id.in_(ids), AccessSession.revoked_at.is_(None))
@@ -138,6 +147,8 @@ def authorize_grant(db, actor, permissions, target=None):
     if superuser(db, actor.id):
         return
     ceiling = db.get(GrantCeiling, actor.id)
+    if target is not None and target != actor.id and ceiling is None:
+        raise HTTPException(403, "No delegation ceiling for managing other principals")
     allowed = effective_permissions(db, actor.id) & set(
         ceiling.permissions if ceiling else []
     )
