@@ -50,6 +50,13 @@ def seed_access_control(db):
                     audience="portal",
                 )
             )
+        else:
+            role = db.get(Role, key)
+            if set(role.permissions) != set(permissions):
+                role.permissions = permissions
+                role.revision += 1
+                for uid in list(db.scalars(select(RoleAssignment.user_id).where(RoleAssignment.role_key == key))):
+                    revoke_principal_sessions(db, uid)
     if not db.get(AppSetting, "rbac_lock"):
         db.add(AppSetting(key="rbac_lock", value_json={}))
     db.flush()

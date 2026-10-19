@@ -20,6 +20,8 @@ import EmptyState from "../components/EmptyState";
 
 export default function DevicesPage({ inventoryOnly = false }) {
   const { can } = useAuth();
+  const [modelEdit, setModelEdit] = useState(null);
+  const [modelChoice, setModelChoice] = useState("");
   const [devices, setDevices] = useState([]);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -112,7 +114,7 @@ export default function DevicesPage({ inventoryOnly = false }) {
       setError(err.message);
     }
   }
-  const [form, setForm] = useState({ device_type_id: "", model_key: "" });
+  const [form, setForm] = useState({ device_type_id: "", model_key: "", name: "" });
   async function refreshCatalog() {
     try {
       const [t, m] = await Promise.all([api.deviceTypes(), api.deviceModels()]);
@@ -192,6 +194,7 @@ export default function DevicesPage({ inventoryOnly = false }) {
         await api.generateDevice({
           ...form,
           device_type_id: Number(form.device_type_id),
+          name: form.name?.trim() || null,
         }),
       );
       await load();
@@ -354,6 +357,9 @@ export default function DevicesPage({ inventoryOnly = false }) {
                             <RefreshCw size={18} />
                           </button>
                         </PermissionGate>
+                        {can("devices.change") && can("models.read") && <button className="secondary-button" onClick={async () => {
+                          try {setModels(await api.deviceModels()); setModelChoice(""); setModelEdit(d);} catch(err) {setError(err.message);}
+                        }}>Change model</button>}
                         <PermissionGate permission="devices.change" action>
                           <button
                             className="icon-button"
@@ -394,6 +400,16 @@ export default function DevicesPage({ inventoryOnly = false }) {
         )}
       </div>
 
+      {modelEdit && <Modal title="Change device model" onClose={()=>setModelEdit(null)}>
+        <form className="form-grid" onSubmit={async e => {e.preventDefault(); try {
+          await api.access(`/devices/admin/${modelEdit.id}/model`, "PATCH", {model_key:modelChoice});
+          setModelEdit(null); setNotice("Model changed. Firmware must match the selected model."); await load();
+        } catch(err) {setError(err.message);}}}>
+          <p>Changes available controls. Firmware is not flashed. Existing saved factory configuration is unchanged.</p>
+          <label>Device model<select required value={modelChoice} onChange={e=>setModelChoice(e.target.value)}>
+            <option value="">Select model</option>{models.map(m=><option key={m.key} value={m.key}>{m.name}</option>)}
+          </select></label><button className="primary-button">Save model</button>
+        </form></Modal>}
       {credentials && (
         <Modal title="Device credentials" onClose={() => setCredentials(null)}>
           <div className="form-grid">
@@ -518,13 +534,14 @@ export default function DevicesPage({ inventoryOnly = false }) {
             </div>
           ) : (
             <form className="form-grid" onSubmit={createDevice}>
+              <label>Device name<input maxLength={100} value={form.name || ""} onChange={e=>setForm({...form,name:e.target.value})}/></label>
               <label>
                 Device type
                 <select
                   required
                   value={form.device_type_id}
                   onChange={(e) =>
-                    setForm({ device_type_id: e.target.value, model_key: "" })
+                    setForm({ ...form, device_type_id: e.target.value, model_key: "" })
                   }
                 >
                   <option value="">Select a type</option>

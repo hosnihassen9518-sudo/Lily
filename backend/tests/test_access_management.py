@@ -397,3 +397,21 @@ def test_password_reset_rejects_long_utf8(client, db, admin):
     target, _ = identity(db, "reset_unicode", ["devices.read"])
     assert client.post(f"/api/v1/access/users/{target.id}/password", headers=admin,
                        json={"password": chr(30028) * 30}).status_code == 422
+
+
+def test_administrator_has_full_device_access_without_security_management(db):
+    from app.services.permission_catalog import PREDEFINED_ROLES
+    permissions = set(PREDEFINED_ROLES["administrator"][1])
+    assert {"inventory.export_secrets", "resources.all", "devices.change"} <= permissions
+    assert not permissions.intersection({"users.create", "users.change", "roles.assign", "api_roles.create", "api_credentials.create"})
+
+
+def test_predefined_role_upgrade_revokes_old_sessions(db):
+    seed_access_control(db)
+    role = db.get(Role, "administrator")
+    role.permissions = ["devices.read"]
+    account = User(email="upgrade@test.org", password_hash="unused", is_admin=True)
+    db.add(account); db.flush(); assign_roles(db, account.id, ["administrator"]); db.commit()
+    token = issue_session(db, account)["access_token"]
+    seed_access_control(db); db.commit()
+    with pytest.raises(HTTPException): validate_session(db, token)

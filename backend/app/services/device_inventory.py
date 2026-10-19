@@ -17,7 +17,9 @@ def c_string(value: str) -> str:
     # Three-digit octal escapes preserve UTF-8 without invalid C surrogate escapes.
     return '"' + ''.join(('\\' + chr(byte)) if byte in (34, 92) else chr(byte) if 32 <= byte < 127 else '\\%03o' % byte for byte in value.encode('utf-8')) + '"'
 
-def create_inventory(db, type_id: int, model_key: str):
+def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
+    if name is not None and (not name.strip() or len(name.strip()) > 100):
+        raise HTTPException(422, "Device name must contain 1 to 100 characters")
     model = db.scalar(select(DeviceModel).where(DeviceModel.key == model_key).with_for_update())
     dtype = db.get(DeviceType, type_id)
     if not model or not dtype or model.device_type_id != type_id:
@@ -29,7 +31,7 @@ def create_inventory(db, type_id: int, model_key: str):
         serial = 'LILY-' + secrets.token_hex(8).upper()
         try:
             with db.begin_nested():
-                device = Device(serial_number=serial, secret_hash=hash_password(secret), model=model.name,
+                device = Device(serial_number=serial, name=name.strip() if name else None, secret_hash=hash_password(secret), model=model.name,
                                 hardware_version=model.hardware_version, lifecycle_status='INVENTORY')
                 db.add(device); db.flush()
                 db.add(DeviceProfile(device_id=device.id, device_type_id=type_id, metadata_json={'model_key': model_key}))

@@ -26,6 +26,7 @@ PERMISSIONS = frozenset(
     for action in actions
 )
 SECURITY_RESOURCES = {
+    "users",
     "roles",
     "api_roles",
     "api_credentials",
@@ -37,7 +38,7 @@ SECURITY_RESOURCES = {
 OPERATIONAL = {
     p
     for p in PERMISSIONS
-    if p.split(".")[0] not in SECURITY_RESOURCES and not p.endswith("export_secrets")
+    if p.split(".")[0] not in SECURITY_RESOURCES
 }
 MOBILE_PERMISSIONS = frozenset(
     {
@@ -49,7 +50,7 @@ MOBILE_PERMISSIONS = frozenset(
 )
 PREDEFINED_ROLES = {
     "superuser": ("Superuser", sorted(PERMISSIONS)),
-    "administrator": ("Administrator", sorted(OPERATIONAL)),
+    "administrator": ("Administrator", sorted(OPERATIONAL | {"resources.all"})),
     "operator": (
         "Operator",
         sorted(

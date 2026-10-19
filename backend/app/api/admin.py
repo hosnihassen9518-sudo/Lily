@@ -83,6 +83,7 @@ def model_in_use(db, model):
 class InventoryCreate(BaseModel):
     device_type_id: int
     model_key: str
+    name: str | None = None
 
 
 from pydantic import Field
@@ -213,7 +214,7 @@ def generated_inventory(
 ):
     from app.services.device_inventory import create_inventory
 
-    result = create_inventory(db, payload.device_type_id, payload.model_key)
+    result = create_inventory(db, payload.device_type_id, payload.model_key, name=payload.name)
     if "inventory.export_secrets" not in actor._access.permissions:
         result = {
             k: v

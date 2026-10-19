@@ -32,6 +32,7 @@ POLICIES = {
         "audio_stop": "devices.control",
         "set_volume": "devices.control",
         "admin_create_device": "inventory.create",
+        "admin_change_device_model": "devices.change",
         "admin_list_devices": "devices.read",
         "admin_set_device_disabled": "devices.change",
         "admin_delete_device": "devices.delete",

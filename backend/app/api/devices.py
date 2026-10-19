@@ -31,6 +31,7 @@ from app.schemas.device import (
     DeviceActivate,
     DeviceClaim,
     DeviceCreate,
+    DeviceModelChange,
     DeviceRename,
     LightCommand,
     VolumeCommand,
@@ -629,3 +630,31 @@ def admin_delete_device(
     db.delete(device)
     db.commit()
     return {"ok": True}
+
+
+@router.patch("/admin/{device_id}/model")
+def admin_change_device_model(device_id: int, payload: DeviceModelChange,
+                              admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.models.device_lifecycle import DeviceModel
+    from app.api.device_operations import require_mutable
+    from app.services.access_audit import audit
+    device = locked_device(db, device_id=device_id)
+    if not can_manage_device(db, admin, device, "inventory.change"):
+        raise HTTPException(404, "Device not found")
+    require_mutable(device)
+    target = db.get(DeviceModel, payload.model_key)
+    if not target:
+        raise HTTPException(422, "Unknown device model")
+    previous = associated_model(db, device)
+    if not previous or target.firmware_target != previous.firmware_target or target.hardware_version != device.hardware_version:
+        raise HTTPException(409, "Model must use compatible firmware and hardware")
+    profile = db.get(DeviceProfile, device.id)
+    if not profile:
+        profile = DeviceProfile(device_id=device.id)
+        db.add(profile)
+    profile.device_type_id = target.device_type_id
+    profile.metadata_json = {**(profile.metadata_json or {}), "model_key": target.key}
+    device.model = target.name
+    audit(db, admin.id, "devices.model_change", device.id)
+    db.commit()
+    return serialize_device(device, db)

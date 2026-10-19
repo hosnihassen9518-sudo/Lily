@@ -30,3 +30,7 @@ class LightCommand(BaseModel):
 
 class VolumeCommand(BaseModel):
     volume: int = Field(ge=0, le=100)
+
+
+class DeviceModelChange(BaseModel):
+    model_key: str

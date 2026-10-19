@@ -121,3 +121,9 @@ session lists are bounded to protect the portal from unbounded result sets.
 ### HTTP and HTTPS deployment
 
 The basic Compose stack serves HTTP on portal port 6080 and backend port 6100. It defaults REQUIRE_HTTPS to false so authentication works on a trusted local network. HTTP does not encrypt credentials or tokens. For TLS deployments set REQUIRE_HTTPS=true in the root .env, configure the HTTPS reverse proxy and TRUSTED_PROXY_IPS, then recreate the backend. The backend setting itself defaults to true outside Compose.
+
+### Administrator device management correction
+
+Administrator has all operational device permissions, including provisioning, factory secret/config export and global device/home scope. Administrator does not receive account, role, API role, API credential or delegation management permissions. Superuser retains those additional controls. On startup, predefined role definitions are synchronized to the shipped definitions; changed definitions revoke affected sessions, requiring a fresh login.
+
+Devices support PATCH /api/v1/devices/admin/{id}/model with model_key, guarded by devices.change and resource access. It accepts compatible firmware targets and hardware revisions, updates the model/type association, preserves credentials and ownership, and audits the change. It does not reflash firmware or rewrite the archived factory configuration. Fresh inventory accepts an optional name.
