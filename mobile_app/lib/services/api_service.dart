@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'light_command_queue.dart';
 import 'dart:math';
 import 'session_store.dart';
 import 'dart:typed_data';
@@ -12,6 +13,35 @@ class ApiService {
   ApiService({http.Client? client, SessionStore? sessionStore})
       : _client = client ?? http.Client(),
         sessionStore = sessionStore ?? SecureSessionStore();
+
+  final Map<String, LightCommandQueue> _lightQueues = {};
+
+  LightCommandQueue lightCommandsFor(int deviceId,
+      {required void Function(Object) onError}) {
+    final server = baseUrl;
+    final session = sessionIdentity;
+    final revision = _revision;
+    final key = jsonEncode([server, session, revision, deviceId]);
+    final queue = _lightQueues.putIfAbsent(
+        key,
+        () => LightCommandQueue(
+            send: (values) async {
+              if (baseUrl != server ||
+                  sessionIdentity != session ||
+                  _revision != revision) {
+                return;
+              }
+              await setLight(deviceId,
+                  enabled: values['enabled'] as bool,
+                  brightness: values['brightness'] as int?,
+                  r: values['r'] as int?,
+                  g: values['g'] as int?,
+                  b: values['b'] as int?);
+            },
+            onError: onError));
+    queue.onError = onError;
+    return queue;
+  }
 
   final http.Client _client;
   String baseUrl = AppConfig.backendBaseUrl;

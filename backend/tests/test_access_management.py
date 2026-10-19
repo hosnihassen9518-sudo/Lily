@@ -24,7 +24,7 @@ from app.services.access_sessions import issue_session, validate_session
 def identity(db, key, permissions):
     seed_access_control(db)
     db.add(Role(key=key, name=key, permissions=permissions, audience="portal"))
-    user = User(email=key + "@test.org", password_hash="unused")
+    user = User(email=key + "@test.org", password_hash="unused", is_admin=True)
     db.add(user)
     db.flush()
     assign_roles(db, user.id, [key])
@@ -403,7 +403,7 @@ def test_administrator_has_full_device_access_without_security_management(db):
     from app.services.permission_catalog import PREDEFINED_ROLES
     permissions = set(PREDEFINED_ROLES["administrator"][1])
     assert {"inventory.export_secrets", "resources.all", "devices.change"} <= permissions
-    assert not permissions.intersection({"users.create", "users.change", "roles.assign", "api_roles.create", "api_credentials.create"})
+    assert not permissions.intersection({"administrators.create", "administrators.change", "roles.assign", "api_roles.create", "api_credentials.create"})
 
 
 def test_predefined_role_upgrade_revokes_old_sessions(db):

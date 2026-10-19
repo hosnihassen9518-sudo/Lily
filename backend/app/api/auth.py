@@ -50,6 +50,7 @@ def mobile_login(
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
     if (
         not user
+        or user.is_admin
         or db.get(ServicePrincipal, user.id)
         or not user.is_active
         or not verify_password(payload.password, user.password_hash)
@@ -128,7 +129,7 @@ def register(
     db.commit()
     db.refresh(user)
 
-    return TokenResponse(access_token=issue_session(db, user)["access_token"])
+    return TokenResponse(access_token=issue_mobile_session(db, user)["access_token"])
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -144,6 +145,7 @@ def login(
 
     if (
         not user
+        or not user.is_admin
         or not user.is_active
         or db.get(ServicePrincipal, user.id)
         or not verify_password(

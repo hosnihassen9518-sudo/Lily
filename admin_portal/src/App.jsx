@@ -4,7 +4,8 @@ import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import DevicesPage from "./pages/DevicesPage";
-import UsersPage from "./pages/AccessUsersPage";
+import UsersPage from "./pages/UsersPage";
+import AdministratorsPage from "./pages/AccessUsersPage";
 import RolesPage from "./pages/RolesPage";
 import ApiAccessPage from "./pages/ApiAccessPage";
 import SessionsPage from "./pages/SessionsPage";
@@ -133,7 +134,7 @@ export default function App() {
           }
         />
         <Route path="settings" element={<SettingsPage />}>
-          <Route path="administrators" element={<PermissionGate permission="users.read" denial><UsersPage/></PermissionGate>}/>
+          <Route path="administrators" element={<PermissionGate permission="administrators.read" denial><AdministratorsPage/></PermissionGate>}/>
           <Route path="roles" element={<PermissionGate permission="roles.read" denial><RolesPage/></PermissionGate>}/>
           <Route path="api-roles" element={<PermissionGate permission="api_roles.read" denial><RolesPage audience="api"/></PermissionGate>}/>
           <Route path="api-access" element={<PermissionGate permission="api_credentials.read" denial><ApiAccessPage/></PermissionGate>}/>

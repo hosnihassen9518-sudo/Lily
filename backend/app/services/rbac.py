@@ -39,6 +39,22 @@ def superuser(db, user_id):
 
 
 def seed_access_control(db):
+    # Preserve the meaning of custom grants created before account separation.
+    if not db.get(AppSetting, "separate_account_permissions_v1"):
+        for role in db.scalars(select(Role).where(Role.predefined.is_(False))):
+            values = sorted({"administrators." + p.split(".", 1)[1] if p.startswith("users.") else p for p in role.permissions})
+            if set(values) != set(role.permissions):
+                role.permissions = values
+                role.revision += 1
+                for uid in list(db.scalars(select(RoleAssignment.user_id).where(RoleAssignment.role_key == role.key))):
+                    revoke_principal_sessions(db, uid)
+        for ceiling in db.scalars(select(GrantCeiling)):
+            values = sorted({"administrators." + p.split(".", 1)[1] if p.startswith("users.") else p for p in ceiling.permissions})
+            if set(values) != set(ceiling.permissions):
+                ceiling.permissions = values
+                revoke_principal_sessions(db, ceiling.user_id)
+        db.add(AppSetting(key="separate_account_permissions_v1", value_json={"version": 1}))
+        db.flush()
     for key, (name, permissions) in PREDEFINED_ROLES.items():
         if not db.get(Role, key):
             db.add(
@@ -204,6 +220,6 @@ def bootstrap_access(db, email):
             "RBAC bootstrap administrator not found; run python -m app.services.rbac_recovery --email <existing-active-admin>"
         )
     if not db.get(RoleAssignment, (user.id, "superuser")):
-        db.add(RoleAssignment(user_id=user.id, role_key="superuser"))
+        assign_roles(db, user.id, ["superuser"])
     db.add(AppSetting(key="rbac_migrated", value_json={"version": "0.9.0"}))
     db.commit()

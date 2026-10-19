@@ -10,6 +10,7 @@ from app.models.music import Music
 from app.models.home import Home, Room
 from app.models.smart_device import DeviceTelemetry, DeviceType
 from app.models.user import User
+from app.models.access_control import ServicePrincipal
 from app.schemas.admin import ActiveUpdate
 from pydantic import BaseModel, Field
 from app.models.device_lifecycle import DeviceModel
@@ -247,7 +248,7 @@ def update_session_policy(payload: SessionPolicy, db: Session = Depends(get_db))
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)):
     return {
-        "users": db.scalar(select(func.count()).select_from(User)),
+        "users": db.scalar(select(func.count()).select_from(User).where(User.is_admin.is_(False), User.id.not_in(select(ServicePrincipal.user_id)))),
         "devices_total": db.scalar(select(func.count()).select_from(Device)),
         "devices_online": db.scalar(
             select(func.count()).select_from(Device).where(Device.is_online == True)
@@ -267,7 +268,8 @@ def dashboard(db: Session = Depends(get_db)):
 
 @router.get("/users")
 def users(db: Session = Depends(get_db)):
-    rows = db.scalars(select(User).order_by(User.created_at.desc())).all()
+    from app.models.access_control import ServicePrincipal
+    rows = db.scalars(select(User).where(User.is_admin.is_(False), User.id.not_in(select(ServicePrincipal.user_id))).order_by(User.created_at.desc())).all()
     return [
         {
             "id": user.id,
@@ -289,10 +291,18 @@ def set_user_active(
     actor: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from app.api.access_control import user_active
-    from app.schemas.access_control import UserStatus
-
-    return user_active(user_id, UserStatus(active=payload.active), actor, db)
+    from app.models.access_control import ServicePrincipal
+    from app.services.rbac import lock_security, revoke_principal_sessions
+    from app.services.access_audit import audit
+    lock_security(db)
+    target = db.get(User, user_id)
+    if not target or target.is_admin or db.get(ServicePrincipal, user_id):
+        raise HTTPException(404, "User not found")
+    target.is_active = payload.active
+    revoke_principal_sessions(db, user_id)
+    audit(db, actor.id, "users.change", user_id)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/homes")

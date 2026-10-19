@@ -57,7 +57,7 @@ export default function AccessUsersPage() {
           <h1>Administrators</h1>
           <p>Assign roles and manage account access.</p>
         </div>
-        {can("users.create") && (
+        {can("administrators.create") && (
           <button
             className="primary-button"
             onClick={() => setDraft({ email: "", password: "", roles: [] })}
@@ -93,7 +93,7 @@ export default function AccessUsersPage() {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.email}</td>
-                  <td>{u.roles.join(", ") || "Mobile user"}</td>
+                  <td>{u.roles.join(", ") || "No role"}</td>
                   <td>{u.active ? "Active" : "Disabled"}</td>
                   <td>
                     {user?.roles?.includes("superuser") && <button className="secondary-button" onClick={() => setReset({id:u.id,email:u.email,password:""})}>Reset password for {u.email}</button>}
@@ -105,7 +105,7 @@ export default function AccessUsersPage() {
                         Edit access for {u.email}
                       </button>
                     )}
-                    {can("users.change") && (
+                    {can("administrators.change") && (
                       <button
                         className="secondary-button"
                         disabled={busy}

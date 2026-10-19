@@ -107,6 +107,8 @@ def validate_session(db, token):
         ):
             raise ValueError()
         if row.auth_method == "mobile":
+            if user.is_admin:
+                raise ValueError()
             parent = db.get(MobileSession, row.id)
             if (
                 not parent

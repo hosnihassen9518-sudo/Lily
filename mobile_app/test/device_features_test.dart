@@ -158,7 +158,7 @@ void main() {
       expect(find.text('Location'), findsNothing);
       expect(find.text('Remove device'), findsNothing);
       expect(find.byTooltip('Rename device'), findsNothing);
-      await tester.ensureVisible(find.text('Configuration'));
+      await tester.scrollUntilVisible(find.text('Configuration'), 240, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text('Configuration'));
       await tester.pumpAndSettle();
       expect(find.text('Location'), findsOneWidget);

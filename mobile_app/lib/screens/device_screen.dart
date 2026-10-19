@@ -1,3 +1,5 @@
+import '../services/light_command_queue.dart';
+import '../widgets/color_wheel.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +18,29 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> {
+  LightCommandQueue? _lightQueue;
+
+  Map<String, Object?> lightValues() {
+    final d = device!;
+    return {
+      'enabled': lightOn,
+      if (d.hasCapability('brightness')) 'brightness': brightness.round(),
+      if (d.hasCapability('rgb')) ...{
+        'r': (color.r * 255).round(),
+        'g': (color.g * 255).round(),
+        'b': (color.b * 255).round(),
+      },
+    };
+  }
+
+  void queueLight() {
+    _lightQueue?.enqueue(lightValues());
+  }
+
+  Future<void> flushLight() async {
+    await _lightQueue?.enqueue(lightValues(), immediate: true);
+  }
+
   bool initialized = false;
   bool lightOn = false;
   double brightness = 100;
@@ -35,32 +60,34 @@ class _DeviceScreenState extends State<DeviceScreen> {
     brightness = d.brightness.toDouble();
     volume = d.volume.toDouble();
     color = Color.fromARGB(255, d.r, d.g, d.b);
+    final api = context.read<AppState>().api;
+    _lightQueue = api.lightCommandsFor(d.id, onError: (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      }
+    });
+    _lightQueue?.reconcile();
+    final pending = _lightQueue?.latestIntent;
+    if (pending != null) {
+      lightOn = pending['enabled'] as bool;
+      brightness = (pending['brightness'] as int? ?? d.brightness).toDouble();
+      color = Color.fromARGB(255, pending['r'] as int? ?? d.r,
+          pending['g'] as int? ?? d.g, pending['b'] as int? ?? d.b);
+    }
     initialized = true;
   }
 
-  Future<void> _run(Future<void> Function() fn) async {
+  Future<void> _run(Future<void> Function() fn, {bool refresh = true}) async {
     try {
       await fn();
-      if (mounted) await context.read<AppState>().refresh();
+      if (mounted && refresh) await context.read<AppState>().refresh();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     }
-  }
-
-  Future<void> pushLight() async {
-    final d = device;
-    if (d == null) return;
-    await _run(() => context.read<AppState>().api.setLight(
-          d.id,
-          enabled: lightOn,
-          brightness: d.hasCapability('brightness') ? brightness.round() : null,
-          r: d.hasCapability('rgb') ? (color.r * 255).round() : null,
-          g: d.hasCapability('rgb') ? (color.g * 255).round() : null,
-          b: d.hasCapability('rgb') ? (color.b * 255).round() : null,
-        ));
   }
 
   @override
@@ -73,14 +100,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
     final d = matches.first;
     initialize(d);
 
-    final presets = [
-      Colors.white,
-      Colors.orange,
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.purple
-    ];
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [
@@ -125,7 +144,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         onChanged: d.online
                             ? (v) async {
                                 setState(() => lightOn = v);
-                                await pushLight();
+                                await flushLight();
                               }
                             : null,
                       ),
@@ -137,43 +156,40 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         value: brightness,
                         min: 0,
                         max: 100,
-                        divisions: 20,
+                        divisions: 100,
                         onChanged: d.online
-                            ? (v) => setState(() => brightness = v)
+                            ? (v) {
+                                setState(() => brightness = v);
+                                queueLight();
+                              }
                             : null,
-                        onChangeEnd: d.online ? (_) => pushLight() : null,
+                        onChangeEnd: d.online ? (_) => flushLight() : null,
                       ),
                     ],
                     if (d.hasCapability('rgb')) ...[
                       const SizedBox(height: 12),
                       const Text('Color'),
                       const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        children: presets
-                            .map((preset) => InkWell(
-                                  onTap: d.online
-                                      ? () async {
-                                          setState(() => color = preset);
-                                          await pushLight();
-                                        }
-                                      : null,
-                                  child: Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: preset,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: color == preset
-                                              ? Colors.black
-                                              : Colors.grey.shade300,
-                                          width: color == preset ? 3 : 1),
-                                    ),
-                                  ),
-                                ))
-                            .toList(),
+                      ColorWheel(
+                        color: color,
+                        onChanged: d.online
+                            ? (value) {
+                                setState(() => color = value);
+                                queueLight();
+                              }
+                            : null,
+                        onChangeEnd: d.online ? flushLight : null,
                       ),
+                      Center(
+                          child: TextButton(
+                        onPressed: d.online
+                            ? () {
+                                setState(() => color = Colors.white);
+                                flushLight();
+                              }
+                            : null,
+                        child: const Text('White'),
+                      )),
                     ],
                   ],
                 ),

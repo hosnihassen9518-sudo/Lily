@@ -49,13 +49,6 @@ def bootstrap():
             db.add(admin_user)
             db.flush()
 
-        if admin_user and not db.scalar(
-            select(Home).where(Home.owner_id == admin_user.id)
-        ):
-            db.add(
-                Home(owner_id=admin_user.id, name="Admin Home", timezone="Europe/Paris")
-            )
-
         defaults = [
             (
                 "lily_audio_light",
@@ -95,6 +88,7 @@ def bootstrap():
         from app.services.rbac import bootstrap_access
 
         bootstrap_access(db, settings.admin_email)
+        db.commit()
 
 
 @asynccontextmanager

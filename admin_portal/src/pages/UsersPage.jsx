@@ -1,9 +1,11 @@
+import { useAuth } from "../context/AuthContext";
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, RefreshCw, Users, Ban, CheckCircle2 } from "lucide-react";
 import { api } from "../services/api";
 import EmptyState from "../components/EmptyState";
 
 export default function UsersPage() {
+  const {can} = useAuth();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -78,7 +80,6 @@ export default function UsersPage() {
                 <tr>
                   <th>User</th>
                   <th>Email</th>
-                  <th>Role</th>
                   <th>Status</th>
                   <th>Registered</th>
                   <th />
@@ -93,7 +94,6 @@ export default function UsersPage() {
                       </strong>
                     </td>
                     <td>{u.email}</td>
-                    <td>{u.admin ? "Administrator" : "User"}</td>
                     <td>
                       <span className={`status-badge ${u.active ? "success" : "danger"}`}>
                         {u.active ? "ACTIVE" : "DISABLED"}
@@ -101,7 +101,7 @@ export default function UsersPage() {
                     </td>
                     <td>{new Date(u.created_at).toLocaleString()}</td>
                     <td>
-                      {!u.admin && (
+                      {can("users.change") && (
                         <button
                           className="icon-button"
                           title={u.active ? "Disable user" : "Enable user"}

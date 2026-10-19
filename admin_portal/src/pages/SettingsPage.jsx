@@ -70,7 +70,7 @@ export default function SettingsPage() {
   const {can} = useAuth();
   const location = useLocation();
   const sections = [
-    ["administrators", "Administrators", "users.read"],
+    ["administrators", "Administrators", "administrators.read"],
     ["roles", "Roles", "roles.read"],
     ["api-roles", "API Roles", "api_roles.read"],
     ["api-access", "API Access", "api_credentials.read"],

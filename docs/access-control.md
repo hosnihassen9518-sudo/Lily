@@ -131,3 +131,23 @@ Devices support PATCH /api/v1/devices/admin/{id}/model with model_key, guarded b
 Role assignment and account/credential creation reject multiple roles. Existing conflicting assignments are preserved for superuser correction; their sessions are revoked on startup and new login is blocked until one role is selected. Removing the last active superuser remains prohibited.
 
 Upgrade recovery: existing portal Superusers with extra roles retain only Superuser automatically, with an audit event and session revocation. This preserves their existing full authority. Other conflicting assignments require explicit correction. Offline recovery remains available via python -m app.services.rbac_recovery --email ACCOUNT_EMAIL.
+
+### Separate mobile users and portal administrators
+
+Mobile registrations are user accounts (`is_admin=false`) and have no portal roles. The main Users page uses `/admin/users` with users.read/users.change, lists only mobile users, and cannot modify administrator or service accounts. Portal accounts (`is_admin=true`) live under Settings > Administrators and use separate administrators.read/create/change grants. They retain their account type even if their assigned role is removed. Portal login accepts only administrators; mobile login and refresh accept only mobile users. Passwords, device ownership and homes remain unchanged.
+
+Administrator includes mobile-user management; administrator-account, role and API management remain separate security permissions. Existing custom users.* permissions and delegation ceilings migrate once to administrators.* so prior grants retain their original meaning. Changed sessions are revoked. Startup commits these changes even on an existing installation.
+
+After deployment, classify the existing named accounts explicitly on the server:
+
+```bash
+docker compose exec backend python -m app.services.account_classification --mobile hassen@example.com --administrator admin@example.com --administrator codex@example.com
+```
+
+The command preserves existing administrator roles, assigns Administrator only when a designated administrator has no role, removes roles from designated mobile users, audits changes and revokes affected sessions. It refuses to remove the last active Superuser. It does not change passwords or ownership.
+
+### Mobile LED controls and model forms
+
+RGB-capable models show a draggable hue/saturation wheel and White shortcut. Brightness-capable models show a 0-100% slider. Unsupported controls remain hidden; offline controls remain disabled. A shared per-device, per-server/session queue coalesces changes, suppresses identical sends, preserves final intent across navigation and paces requests at least 2.2 seconds apart to respect the existing write-rate policy. Access-token rotation does not replace the stable session key. Logout or server changes prevent old queued writes.
+
+Models & features lists models with explicit Create model, Edit and Delete actions. Create/edit forms appear in dialogs, include feature descriptions/dependency selection and preserve entered values on failed saves.

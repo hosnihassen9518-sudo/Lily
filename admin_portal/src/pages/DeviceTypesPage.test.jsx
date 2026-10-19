@@ -22,12 +22,13 @@ it('edits explicit capabilities and keeps model key immutable',async()=>{
 it('adds feature prerequisites and shows create failures without losing the form',async()=>{
  api.createDeviceModel.mockRejectedValue(new Error('Model key already exists'));
  render(<DeviceTypesPage/>);await screen.findByRole('button',{name:'Edit Lamp'});
+ fireEvent.click(screen.getByRole('button',{name:'Create model'}));
  fireEvent.change(screen.getByLabelText('Model key'),{target:{value:'new'}});
  fireEvent.change(screen.getByLabelText('Model name'),{target:{value:'New lamp'}});
  fireEvent.change(screen.getByLabelText('Device type'),{target:{value:'1'}});
  fireEvent.click(screen.getByRole('checkbox',{name:'volume'}));
  expect(screen.getByRole('checkbox',{name:'audio'}).checked).toBe(true);
- fireEvent.click(screen.getByRole('button',{name:'Create model'}));
+ fireEvent.click(screen.getByRole('button',{name:'Save new model'}));
  await screen.findByText('Model key already exists');expect(screen.getByLabelText('Model name').value).toBe('New lamp');
 });
 it('shows pending schedule delivery after a model is saved',async()=>{
@@ -45,6 +46,7 @@ it('requires deletion confirmation and preserves models when in use',async()=>{
 });
 it('selecting color includes light and power and removing power removes dependents',async()=>{
  render(<DeviceTypesPage/>);await screen.findByRole('button',{name:'Edit Lamp'});
+ fireEvent.click(screen.getByRole('button',{name:'Create model'}));
  fireEvent.click(screen.getByRole('checkbox',{name:'rgb'}));
  expect(screen.getByRole('checkbox',{name:'light'}).checked).toBe(true);
  expect(screen.getByRole('checkbox',{name:'power'}).checked).toBe(true);

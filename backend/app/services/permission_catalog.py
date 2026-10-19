@@ -3,6 +3,7 @@
 RESOURCE_ACTIONS = {
     "dashboard": ["read"],
     "users": ["read", "create", "change"],
+    "administrators": ["read", "create", "change"],
     "devices": ["read", "change", "delete", "control", "export"],
     "inventory": ["read", "create", "change", "export_secrets"],
     "models": ["read", "create", "change", "delete"],
@@ -26,7 +27,7 @@ PERMISSIONS = frozenset(
     for action in actions
 )
 SECURITY_RESOURCES = {
-    "users",
+    "administrators",
     "roles",
     "api_roles",
     "api_credentials",

@@ -1,4 +1,5 @@
 import { useAuth } from "../context/AuthContext";
+import Modal from "../components/Modal";
 import PermissionGate from "../components/PermissionGate";
 import React, { useEffect, useState } from "react";
 import { api } from "../services/api";
@@ -22,6 +23,8 @@ export default function DeviceTypesPage() {
     capabilities: [],
   };
   const [model, setModel] = useState(emptyModel);
+  const [showModel, setShowModel] = useState(false);
+  const [showType, setShowType] = useState(false);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -94,6 +97,7 @@ export default function DeviceTypesPage() {
         : await api.createDeviceModel({ key, ...payload });
       setModel(emptyModel);
       setEditing(false);
+      setShowModel(false);
       await load();
       if (response?.schedule_sync_pending?.length)
         setNotice(
@@ -138,6 +142,7 @@ export default function DeviceTypesPage() {
       setKey("");
       setName("");
       setCaps("");
+      setShowType(false);
       await load();
     } catch (e) {
       setError(e.message);
@@ -149,10 +154,13 @@ export default function DeviceTypesPage() {
       <div className="page-heading">
         <div>
           <h1>Models & features</h1>
-          <p>Choose the controls supported by each hardware model.</p>
+          <p>Define hardware models and the controls shown in the mobile app.</p>
+          </div><div className="access-actions">
+            {can("models.create") && <button className="primary-button" onClick={()=>{setModel(emptyModel);setEditing(false);setShowModel(true);setError("");}}>Create model</button>}
+            {can("device_types.create") && <button className="secondary-button" onClick={()=>setShowType(true)}>Create device type</button>}
         </div>
       </div>
-      {error && (
+      {error && !showModel && !showType && (
         <div className="alert error" role="alert">
           {error}
         </div>
@@ -162,10 +170,12 @@ export default function DeviceTypesPage() {
           {notice}
         </div>
       )}
-      <div className="panel" style={{ marginBottom: 20 }}>
+      {showModel && <Modal title={editing ? "Edit model" : "Create model"} wide onClose={()=>!busy && setShowModel(false)}>
+      {error && <div role="alert" className="alert error">{error}</div>}
+      <div>
         <div className="panel-header">
           <div>
-            <h2>{editing ? "Edit model" : "Add model"}</h2>
+            <h3>Model details</h3>
             <p>Model keys identify factory devices and cannot be changed.</p>
           </div>
         </div>
@@ -267,9 +277,9 @@ export default function DeviceTypesPage() {
               disabled={busy || !ready || !can(editing ? "models.change" : "models.create")}
               type="submit"
             >
-              {busy ? "Saving…" : editing ? "Save model" : "Create model"}
+              {busy ? "Saving…" : editing ? "Save model" : "Save new model"}
             </button>
-            {editing && (
+            {(
               <button
                 className="secondary-button"
                 disabled={busy}
@@ -277,14 +287,16 @@ export default function DeviceTypesPage() {
                 onClick={() => {
                   setModel(emptyModel);
                   setEditing(false);
+                  setShowModel(false);
                 }}
               >
-                Cancel edit
+                Cancel
               </button>
             )}
           </div>
         </form>
       </div>
+      </Modal>}
       {deleting && (
         <div
           className="panel"
@@ -345,6 +357,7 @@ export default function DeviceTypesPage() {
                     <PermissionGate permission="models.change" action>
                       <button
                         disabled={busy}
+                        className="secondary-button"
                         aria-label={`Edit ${m.name}`}
                         onClick={() => {
                           setModel({
@@ -352,6 +365,7 @@ export default function DeviceTypesPage() {
                             capabilities: [...(m.capabilities || [])],
                           });
                           setEditing(true);
+                          setShowModel(true);
                           setError("");
                         }}
                       >
@@ -361,6 +375,7 @@ export default function DeviceTypesPage() {
                     <PermissionGate permission="models.delete" action>
                       <button
                         disabled={busy}
+                        className="secondary-button danger-text"
                         aria-label={`Delete ${m.name}`}
                         onClick={() => setDeleting(m)}
                       >
@@ -381,6 +396,8 @@ export default function DeviceTypesPage() {
           </table>
         </div>
       </div>
+      {showType && <Modal title="Create device type" onClose={()=>setShowType(false)}>
+      {error && <div role="alert" className="alert error">{error}</div>}
       <div className="panel" style={{ marginBottom: 20 }}>
         <div className="panel-header">
           <div>
@@ -427,6 +444,7 @@ export default function DeviceTypesPage() {
           </div>
         </form>
       </div>
+      </Modal>}
       <div className="panel">
         <div className="table-wrap">
           <table>

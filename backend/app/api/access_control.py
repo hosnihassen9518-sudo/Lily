@@ -212,7 +212,7 @@ def delete_api_role(
 
 @router.get("/users")
 def users(
-    user: User = Depends(require_permission("users.read")),
+    user: User = Depends(require_permission("administrators.read")),
     db: Session = Depends(get_db),
 ):
     service_ids = select(ServicePrincipal.user_id)
@@ -229,7 +229,7 @@ def users(
             ),
         }
         for u in db.scalars(
-            select(User).where(User.id.not_in(service_ids)).order_by(User.id)
+            select(User).where(User.id.not_in(service_ids), User.is_admin.is_(True)).order_by(User.id)
         )
     ]
 
@@ -237,7 +237,7 @@ def users(
 @router.post("/users")
 def create_user(
     payload: UserInput,
-    user: User = Depends(require_permission("users.create")),
+    user: User = Depends(require_permission("administrators.create")),
     db: Session = Depends(get_db),
 ):
     lock_security(db)
@@ -255,7 +255,7 @@ def create_user(
         email=payload.email.lower(),
         password_hash=hash_password(payload.password),
         is_active=True,
-        is_admin=bool(payload.roles),
+        is_admin=True,
     )
     db.add(row)
     db.flush()
@@ -274,7 +274,7 @@ def user_roles(
 ):
     lock_security(db)
     target = db.get(User, user_id)
-    if not target or db.get(ServicePrincipal, user_id):
+    if not target or not target.is_admin or db.get(ServicePrincipal, user_id):
         raise HTTPException(404, "User not found")
     roles = [db.get(Role, k) for k in payload.roles]
     if any(r is None or r.audience != "portal" for r in roles):
@@ -287,7 +287,7 @@ def user_roles(
         db, user, set().union(*(set(r.permissions) for r in roles)), user_id
     )
     assign_roles(db, user_id, payload.roles)
-    target.is_admin = bool(payload.roles)
+    target.is_admin = True
     audit(db, user.id, "roles.assign", user_id)
     db.commit()
     return {"ok": True}
@@ -321,13 +321,13 @@ def ceiling(
 def user_active(
     user_id: int,
     payload: UserStatus,
-    user: User = Depends(require_permission("users.change")),
+    user: User = Depends(require_permission("administrators.change")),
     db: Session = Depends(get_db),
 ):
     lock_security(db)
     target = db.get(User, user_id)
-    if not target:
-        raise HTTPException(404, "User not found")
+    if not target or not target.is_admin or db.get(ServicePrincipal, user_id):
+        raise HTTPException(404, "Administrator not found")
     authorize_grant(db, user, [], user_id)
     if not payload.active:
         protect_last_superuser(db, user_id)
@@ -579,14 +579,14 @@ def set_rate_settings(
 def reset_user_password(
     user_id: int,
     payload: PasswordReset,
-    user: User = Depends(require_permission("users.change")),
+    user: User = Depends(require_permission("administrators.change")),
     db: Session = Depends(get_db),
 ):
     lock_security(db)
     if not superuser(db, user.id):
         raise HTTPException(403, "Superuser required")
     target = db.get(User, user_id)
-    if not target or db.get(ServicePrincipal, user_id):
+    if not target or not target.is_admin or db.get(ServicePrincipal, user_id):
         raise HTTPException(404, "Account not found")
     if len(payload.password.encode("utf-8")) > 72:
         raise HTTPException(422, "Password must not exceed 72 UTF-8 bytes")

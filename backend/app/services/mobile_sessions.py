@@ -56,7 +56,7 @@ def rotate_mobile_session(db, refresh_token, request_id, now=None):
     access=db.get(AccessSession,row.id)
     if not access or access.revoked_at: raise HTTPException(401,"Session revoked. Sign in again.")
     user = db.get(User, row.user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.is_admin:
         raise HTTPException(401, 'Inactive user')
     if row.previous_refresh_hash == hashed:
         if row.rotation_request_id != request_id or not row.rotated_at:
