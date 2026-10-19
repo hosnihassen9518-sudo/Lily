@@ -17,6 +17,7 @@ DEFAULTS = {
     "session": 120,
     "api_principal": 120,
     "sensitive": 30,
+    "light_controls": 300,
 }
 
 
@@ -111,7 +112,19 @@ def login_limit(db, request, email):
 def session_limit(db, request, context):
     require_https(request)
     values = policies(db)
-    consume_limit(db, "session:" + context.session_id, values["session"], 60)
+    endpoint = request.scope.get("endpoint")
+    smooth_light = (
+        context.auth_method == "mobile"
+        and request.method == "PUT"
+        and getattr(endpoint, "__module__", "") == "app.api.devices"
+        and getattr(endpoint, "__name__", "") == "set_light"
+    )
+    if smooth_light:
+        consume_limit(db, "light-session:" + context.session_id, values["light_controls"], 60)
+        consume_limit(db, "light-user:" + str(context.principal.id), values["light_controls"], 60)
+        consume_limit(db, "light-burst:" + str(context.principal.id), 10, 1)
+    else:
+        consume_limit(db, "session:" + context.session_id, values["session"], 60)
     if context.auth_method == "api":
         consume_limit(
             db, "api:" + str(context.principal.id), values["api_principal"], 60
@@ -127,7 +140,7 @@ def session_limit(db, request, context):
                 min(values["api_principal"], credential.rate_limit),
                 60,
             )
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
+    if not smooth_light and request.method not in ("GET", "HEAD", "OPTIONS"):
         consume_limit(
             db, "sensitive:" + str(context.principal.id), values["sensitive"], 60
         )

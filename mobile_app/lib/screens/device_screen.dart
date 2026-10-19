@@ -156,7 +156,6 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         value: brightness,
                         min: 0,
                         max: 100,
-                        divisions: 100,
                         onChanged: d.online
                             ? (v) {
                                 setState(() => brightness = v);

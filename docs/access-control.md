@@ -148,6 +148,6 @@ The command preserves existing administrator roles, assigns Administrator only w
 
 ### Mobile LED controls and model forms
 
-RGB-capable models show a draggable hue/saturation wheel and White shortcut. Brightness-capable models show a 0-100% slider. Unsupported controls remain hidden; offline controls remain disabled. A shared per-device, per-server/session queue coalesces changes, suppresses identical sends, preserves final intent across navigation and paces requests at least 2.2 seconds apart to respect the existing write-rate policy. Access-token rotation does not replace the stable session key. Logout or server changes prevent old queued writes.
+RGB-capable models show a draggable hue/saturation wheel and White shortcut. Brightness-capable models show a 0-100% slider. Unsupported controls remain hidden; offline controls remain disabled. A shared per-device, per-server/session queue coalesces changes, suppresses identical sends, preserves final intent across navigation and paces requests at least 250 milliseconds apart. Authenticated mobile light updates have a separate 300/minute per-session and per-user budget plus a 10/second burst limit; sensitive account changes and API credentials retain their existing limits. Access-token rotation does not replace the stable session key. Logout or server changes prevent old queued writes.
 
 Models & features lists models with explicit Create model, Edit and Delete actions. Create/edit forms appear in dialogs, include feature descriptions/dependency selection and preserve entered values on failed saves.

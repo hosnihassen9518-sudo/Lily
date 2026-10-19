@@ -24,18 +24,22 @@ class LightCommandQueue {
   LightCommandQueue(
       {required this.send,
       required this.onError,
-      this.minimumInterval = const Duration(milliseconds: 2200),
-      this.debounce = const Duration(milliseconds: 220)});
+      this.minimumInterval = const Duration(milliseconds: 250),
+      this.debounce = const Duration(milliseconds: 40)});
 
   Future<void> enqueue(Map<String, Object?> values, {bool immediate = false}) {
     _pending = Map.unmodifiable(values);
-    _timer?.cancel();
-    _timer = null;
-    if (immediate) return _drain();
-    _timer = Timer(debounce, () {
+    if (immediate) {
+      _timer?.cancel();
       _timer = null;
-      unawaited(_drain());
-    });
+      return _drain();
+    }
+    if (!_sending) {
+      _timer ??= Timer(debounce, () {
+        _timer = null;
+        unawaited(_drain());
+      });
+    }
     return Future.value();
   }
 

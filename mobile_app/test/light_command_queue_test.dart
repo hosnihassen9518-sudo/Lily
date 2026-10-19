@@ -79,4 +79,24 @@ void main() {
     await queue.enqueue({'enabled': true}, immediate: true);
     expect(sent.length, 2);
   });
+  test(
+      'continuous dragging streams updates before release and keeps the final value',
+      () async {
+    final sent = <Map<String, Object?>>[];
+    final queue = LightCommandQueue(
+        send: (v) async {
+          sent.add(v);
+        },
+        onError: (e) => fail('$e'),
+        minimumInterval: const Duration(milliseconds: 20),
+        debounce: const Duration(milliseconds: 25));
+    for (var i = 0; i < 30; i++) {
+      queue.enqueue({'enabled': true, 'brightness': i});
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(sent.length, greaterThan(1));
+    await queue.enqueue({'enabled': true, 'brightness': 30}, immediate: true);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(sent.last['brightness'], 30);
+  });
 }

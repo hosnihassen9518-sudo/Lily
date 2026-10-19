@@ -84,3 +84,44 @@ def test_production_http_can_be_explicitly_enabled(client, admin, monkeypatch):
     monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "require_https", False)
     assert client.get("/api/v1/auth/me", headers=admin).status_code == 200
+
+
+def test_mobile_light_drag_has_its_own_bounded_budget(db, monkeypatch):
+    monkeypatch.setattr("app.services.rate_limits.time.time", lambda: 1000)
+    from types import SimpleNamespace
+    from starlette.requests import Request
+    from app.services.rate_limits import session_limit
+    from app.api.devices import set_light
+    from app.models.user import User
+    user = User(email="smooth@test.org",password_hash="unused")
+    db.add(user); db.commit()
+    # A direct context suffices: authentication and ownership are tested separately.
+    context = SimpleNamespace(session_id="smooth-session",auth_method="mobile",principal=user)
+    request = Request({"type":"http","method":"PUT","path":"/api/v1/devices/1/light","scheme":"http","headers":[],"endpoint":set_light,"client":("127.0.0.1",123)})
+    for _ in range(10): session_limit(db,request,context)
+    with pytest.raises(HTTPException) as error: session_limit(db,request,context)
+    assert error.value.status_code == 429
+
+
+def test_mobile_light_drag_exceeds_sensitive_write_budget_but_remains_limited(db, monkeypatch):
+    from types import SimpleNamespace
+    from starlette.requests import Request
+    from app.services.rate_limits import session_limit
+    from app.api.devices import set_light
+    from app.models.user import User
+    from app.models.device_lifecycle import AppSetting
+    clock = [1000]
+    monkeypatch.setattr("app.services.rate_limits.time.time",lambda:clock[0])
+    user = User(email="dragbudget@test.org",password_hash="unused")
+    db.add(user); db.add(AppSetting(key="access_rate_limits",value_json={"light_controls":35})); db.commit()
+    context = SimpleNamespace(session_id="drag-session",auth_method="mobile",principal=user)
+    request = Request({"type":"http","method":"PUT","path":"/api/v1/devices/1/light","scheme":"http","headers":[],"endpoint":set_light,"client":("127.0.0.1",123)})
+    for i in range(35):
+        clock[0] = 1000 + i // 4
+        session_limit(db,request,context)
+    with pytest.raises(HTTPException) as error: session_limit(db,request,context)
+    assert error.value.status_code == 429
+    # Other mobile writes still use the sensitive limit.
+    request.scope['endpoint'] = lambda: None
+    for _ in range(30): session_limit(db,request,context)
+    with pytest.raises(HTTPException): session_limit(db,request,context)

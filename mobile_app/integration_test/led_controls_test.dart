@@ -48,9 +48,15 @@ void main() {
     expect(find.byType(ColorWheel), findsOneWidget);
     final wheel = find.byType(ColorWheel);
     final center = tester.getCenter(wheel);
-    await tester.dragFrom(center + const Offset(85, 0), const Offset(-85, 85));
+    final gesture = await tester.startGesture(center + const Offset(90, 0));
+    for (var step = 1; step <= 12; step++) {
+      await gesture.moveTo(center + Offset(90 - step * 7.0, step * 7.0));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(requests.length, greaterThan(1));
+    await gesture.up();
     await tester.pumpAndSettle();
-    expect(requests, isNotEmpty);
+    expect(requests.length, greaterThan(1));
     expect(requests.last.keys,
         containsAll(['enabled', 'brightness', 'r', 'g', 'b']));
     final slider = find.byType(Slider).first;
