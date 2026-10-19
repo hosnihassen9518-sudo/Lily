@@ -88,7 +88,7 @@ def client_ip(request):
 
 
 def require_https(request):
-    if settings.environment != "production":
+    if settings.environment != "production" or not settings.require_https:
         return
     secure = request.url.scheme == "https"
     host = request.client.host if request.client else ""

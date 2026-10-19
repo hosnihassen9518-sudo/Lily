@@ -117,3 +117,7 @@ The Audit view records privileged mutations, denied authenticated changes, secre
 credential issuance/revocation/exchange and recovery without request bodies or secrets.
 Audit reads require audit.read; there is no application API to edit/delete events. Audit and
 session lists are bounded to protect the portal from unbounded result sets.
+
+### HTTP and HTTPS deployment
+
+The basic Compose stack serves HTTP on portal port 6080 and backend port 6100. It defaults REQUIRE_HTTPS to false so authentication works on a trusted local network. HTTP does not encrypt credentials or tokens. For TLS deployments set REQUIRE_HTTPS=true in the root .env, configure the HTTPS reverse proxy and TRUSTED_PROXY_IPS, then recreate the backend. The backend setting itself defaults to true outside Compose.

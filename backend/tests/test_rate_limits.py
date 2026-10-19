@@ -76,3 +76,11 @@ def test_parallel_workers_share_one_atomic_bucket(tmp_path):
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(hit, range(12)))
     assert results.count(200) == 3 and results.count(429) == 9
+
+
+def test_production_http_can_be_explicitly_enabled(client, admin, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "require_https", False)
+    assert client.get("/api/v1/auth/me", headers=admin).status_code == 200
