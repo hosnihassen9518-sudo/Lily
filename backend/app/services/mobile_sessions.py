@@ -37,7 +37,10 @@ def issue_mobile_session(db, user, now=None):
     now = utc(now or datetime.now(timezone.utc))
     refresh = secrets.token_urlsafe(48)
     session = MobileSession(id=secrets.token_hex(16), user_id=user.id, current_refresh_hash=digest(refresh), expires_at=calendar_expiry(now, months_policy(db)))
-    db.add(session); db.commit()
+    db.add(session); db.flush()
+    from app.services.access_sessions import issue_session
+    issue_session(db,user,auth_method="mobile",session_id=session.id,expires_at=session.expires_at,commit=False)
+    db.commit()
     return response(session, refresh, now)
 
 def rotated_token(session_id, request_id):
@@ -49,6 +52,9 @@ def rotate_mobile_session(db, refresh_token, request_id, now=None):
     row = db.scalar(select(MobileSession).where((MobileSession.current_refresh_hash == hashed) | (MobileSession.previous_refresh_hash == hashed)))
     if not row or row.revoked_at or utc(row.expires_at) <= now:
         raise HTTPException(401, 'Session expired. Sign in again.')
+    from app.models.access_control import AccessSession
+    access=db.get(AccessSession,row.id)
+    if not access or access.revoked_at: raise HTTPException(401,"Session revoked. Sign in again.")
     user = db.get(User, row.user_id)
     if not user or not user.is_active:
         raise HTTPException(401, 'Inactive user')

@@ -1,3 +1,4 @@
+from app.services.access_sessions import can_access_device, can_access_home
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
@@ -21,17 +22,18 @@ from app.services.device_features import associated_model, validate_state, valid
 router = APIRouter(tags=["smart-home"])
 
 
-def _home_for_user(db: Session, home_id: int, user_id: int) -> Home:
-    home = db.scalar(select(Home).where(Home.id == home_id, Home.owner_id == user_id))
+def _home_for_user(db: Session, home_id: int, user_id) -> Home:
+    home = db.get(Home,home_id)
+    if home and not can_access_home(user_id,home): home=None
     if not home:
         raise HTTPException(status_code=404, detail="Home not found")
     return home
 
 
-def _owned_device(db: Session, device_id: int, user_id: int) -> Device:
+def _owned_device(db: Session, device_id: int, user_id) -> Device:
     from app.api.device_operations import locked_device
     device = locked_device(db,device_id=device_id)
-    if not device or device.owner_id != user_id:
+    if not device or not can_access_device(db,user_id,device):
         raise HTTPException(status_code=404, detail="Device not found")
     from app.api.device_operations import require_mutable
     require_mutable(device)
@@ -48,8 +50,8 @@ def _serialize_room(room: Room):
 
 @router.get("/homes")
 def list_homes(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    homes = db.scalars(select(Home).where(Home.owner_id == user.id).order_by(Home.id)).all()
-    return [_serialize_home(h) for h in homes]
+    homes = db.scalars(select(Home).order_by(Home.id)).all()
+    return [_serialize_home(h) for h in homes if can_access_home(user,h)]
 
 
 @router.post("/homes")
@@ -61,7 +63,7 @@ def create_home(payload: HomeCreate, user: User = Depends(get_current_user), db:
 
 @router.patch("/homes/{home_id}")
 def update_home(home_id: int, payload: HomeUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    home = _home_for_user(db, home_id, user.id)
+    home = _home_for_user(db, home_id, user)
     if payload.name is not None: home.name = payload.name
     if payload.timezone is not None: home.timezone = payload.timezone
     db.commit(); db.refresh(home)
@@ -70,7 +72,7 @@ def update_home(home_id: int, payload: HomeUpdate, user: User = Depends(get_curr
 
 @router.delete("/homes/{home_id}")
 def delete_home(home_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    home = _home_for_user(db, home_id, user.id)
+    home = _home_for_user(db, home_id, user)
     profiles = db.scalars(select(DeviceProfile).where(DeviceProfile.home_id == home.id)).all()
     for p in profiles:
         p.home_id = None; p.room_id = None
@@ -80,14 +82,14 @@ def delete_home(home_id: int, user: User = Depends(get_current_user), db: Sessio
 
 @router.get("/homes/{home_id}/rooms")
 def list_rooms(home_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _home_for_user(db, home_id, user.id)
+    _home_for_user(db, home_id, user)
     rooms = db.scalars(select(Room).where(Room.home_id == home_id).order_by(Room.name)).all()
     return [_serialize_room(r) for r in rooms]
 
 
 @router.post("/homes/{home_id}/rooms")
 def create_room(home_id: int, payload: RoomCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _home_for_user(db, home_id, user.id)
+    _home_for_user(db, home_id, user)
     existing = db.scalar(select(Room).where(Room.home_id == home_id, Room.name == payload.name))
     if existing: raise HTTPException(status_code=409, detail="Room name already exists in this home")
     room = Room(home_id=home_id, name=payload.name, icon=payload.icon)
@@ -99,7 +101,7 @@ def create_room(home_id: int, payload: RoomCreate, user: User = Depends(get_curr
 def update_room(room_id: int, payload: RoomUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     room = db.get(Room, room_id)
     if not room: raise HTTPException(status_code=404, detail="Room not found")
-    _home_for_user(db, room.home_id, user.id)
+    _home_for_user(db, room.home_id, user)
     if payload.name is not None: room.name = payload.name
     if payload.icon is not None: room.icon = payload.icon
     db.commit(); db.refresh(room)
@@ -110,7 +112,7 @@ def update_room(room_id: int, payload: RoomUpdate, user: User = Depends(get_curr
 def delete_room(room_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     room = db.get(Room, room_id)
     if not room: raise HTTPException(status_code=404, detail="Room not found")
-    _home_for_user(db, room.home_id, user.id)
+    _home_for_user(db, room.home_id, user)
     profiles = db.scalars(select(DeviceProfile).where(DeviceProfile.room_id == room.id)).all()
     for p in profiles: p.room_id = None
     db.delete(room); db.commit()
@@ -141,19 +143,19 @@ def create_device_type(payload: DeviceTypeCreate, admin: User = Depends(require_
 
 @router.get("/devices/{device_id}/profile")
 def get_profile(device_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    device = _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user)
     p = db.get(DeviceProfile, device_id)
     return {"device_id": device_id, "home_id": p.home_id if p else None, "room_id": p.room_id if p else None, "device_type_id": p.device_type_id if p else None, "metadata": p.metadata_json if p else {}}
 
 
 @router.put("/devices/{device_id}/profile")
 def update_profile(device_id: int, payload: DeviceProfileUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    device = _owned_device(db, device_id, user.id)
-    if payload.home_id is not None: _home_for_user(db, payload.home_id, user.id)
+    device = _owned_device(db, device_id, user)
+    if payload.home_id is not None: _home_for_user(db, payload.home_id, user)
     if payload.room_id is not None:
         room = db.get(Room, payload.room_id)
         if not room: raise HTTPException(status_code=404, detail="Room not found")
-        _home_for_user(db, room.home_id, user.id)
+        _home_for_user(db, room.home_id, user)
         if payload.home_id is not None and room.home_id != payload.home_id:
             raise HTTPException(status_code=400, detail="Room does not belong to selected home")
     if payload.device_type_id is not None and not db.get(DeviceType, payload.device_type_id):
@@ -178,14 +180,14 @@ def update_profile(device_id: int, payload: DeviceProfileUpdate, user: User = De
 
 @router.get("/devices/{device_id}/state")
 def get_state(device_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    _owned_device(db, device_id, user)
     state = db.get(DeviceState, device_id)
     return {"device_id": device_id, "state": state.state if state else {}, "updated_at": state.updated_at if state else None}
 
 
 @router.put("/devices/{device_id}/state")
 def set_state(device_id: int, payload: DeviceStateUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    device = _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user)
     validate_state(db, device, payload.state)
     state = db.get(DeviceState, device_id) or DeviceState(device_id=device_id)
     if state not in db: db.add(state)
@@ -197,7 +199,7 @@ def set_state(device_id: int, payload: DeviceStateUpdate, user: User = Depends(g
 
 @router.post("/devices/{device_id}/command")
 def generic_command(device_id: int, payload: GenericCommand, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    device = _owned_device(db, device_id, user.id)
+    device = _owned_device(db, device_id, user)
     validate_command(db, device, payload.model_dump())
     if payload.type == 'light': payload.payload = light_payload(db, device, payload.payload)
     from app.api.device_operations import device_generation
@@ -208,7 +210,7 @@ def generic_command(device_id: int, payload: GenericCommand, user: User = Depend
 
 @router.post("/devices/{device_id}/telemetry")
 def add_telemetry(device_id: int, payload: TelemetryIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    _owned_device(db, device_id, user)
     numeric = None; text = None
     if isinstance(payload.value, bool): text = str(payload.value).lower()
     elif isinstance(payload.value, (int, float)): numeric = float(payload.value)
@@ -220,7 +222,7 @@ def add_telemetry(device_id: int, payload: TelemetryIn, user: User = Depends(get
 
 @router.get("/devices/{device_id}/telemetry")
 def get_telemetry(device_id: int, metric: str | None = None, limit: int = Query(100, ge=1, le=1000), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _owned_device(db, device_id, user.id)
+    _owned_device(db, device_id, user)
     q = select(DeviceTelemetry).where(DeviceTelemetry.device_id == device_id)
     if metric: q = q.where(DeviceTelemetry.metric == metric)
     rows = db.scalars(q.order_by(DeviceTelemetry.recorded_at.desc()).limit(limit)).all()

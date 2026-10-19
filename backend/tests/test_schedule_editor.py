@@ -29,7 +29,15 @@ def test_edit_schedule_and_retry_delivery(client, db, owner, admin, monkeypatch)
     assert sent[-1]['schedules'][0]['days'] == [0,2,4]
     assert sent[-1]['schedules'][0]['time'] == '20:00'
     assert sent[-1]['schedules'][0]['action']['light']['enabled'] is True
-    assert client.patch(f'/api/v1/schedules/{sid}', headers=admin, json=body).status_code == 404
+    # Superuser now has explicit global scope; unrelated ordinary users remain denied.
+    assert client.patch(f'/api/v1/schedules/{sid}', headers=admin, json=body).status_code == 200
+    from app.models.user import User
+    from app.services.access_sessions import issue_session
+    from app.services.permission_catalog import MOBILE_PERMISSIONS
+    unrelated=User(email='unrelated-schedule@test.org',password_hash='unused')
+    db.add(unrelated);db.commit()
+    unrelated_headers={'Authorization':'Bearer '+issue_session(db,unrelated,permissions=MOBILE_PERMISSIONS)['access_token']}
+    assert client.patch(f'/api/v1/schedules/{sid}',headers=unrelated_headers,json=body).status_code == 404
     assert client.delete(f'/api/v1/schedules/{sid}', headers=owner[1]).status_code == 200
     assert sent[-1]['schedules'] == []
 

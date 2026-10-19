@@ -1,3 +1,4 @@
+from app.services.access_sessions import can_access_device, can_access_home
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -64,7 +65,7 @@ def list_schedules(
     from app.api.device_operations import locked_device
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",
@@ -100,7 +101,7 @@ def create_schedule(
     from app.api.device_operations import locked_device
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",
@@ -144,7 +145,7 @@ def delete_schedule(
 ):
     schedule = db.get(Schedule, schedule_id)
 
-    if not schedule or schedule.user_id != user.id:
+    if not schedule:
         raise HTTPException(
             status_code=404,
             detail="Schedule not found",
@@ -155,7 +156,7 @@ def delete_schedule(
 
     from app.api.device_operations import require_mutable
     if device: require_mutable(device)
-    if not device or device.owner_id!=user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(404,"Device not found")
     db.delete(schedule)
     db.flush()
@@ -172,10 +173,10 @@ def update_schedule(schedule_id: int, payload: ScheduleCreate,
                     user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from app.api.device_operations import locked_device, require_mutable
     schedule = db.get(Schedule, schedule_id)
-    if not schedule or schedule.user_id != user.id:
+    if not schedule:
         raise HTTPException(404, "Schedule not found")
     device = locked_device(db, device_id=schedule.device_id)
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(404, "Device not found")
     require_mutable(device)
     schedule_action(db, device, payload.action)

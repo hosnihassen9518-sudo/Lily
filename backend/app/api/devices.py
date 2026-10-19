@@ -1,3 +1,4 @@
+from app.services.access_sessions import can_access_device, can_access_home
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -142,10 +143,10 @@ def my_devices(
     db: Session = Depends(get_db),
 ):
     devices = db.scalars(
-        select(Device).where(Device.owner_id == user.id)
+        select(Device)
     ).all()
 
-    return [serialize_device(d, db) for d in devices]
+    return [serialize_device(d, db) for d in devices if can_access_device(db,user,d)]
 
 @router.patch("/{device_id}")
 def rename_device(
@@ -155,7 +156,7 @@ def rename_device(
     db: Session = Depends(get_db),
 ):
     device = locked_device(db,device_id=device_id)
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(status_code=404, detail="Device not found")
     name = payload.name.strip()
     if not name:
@@ -196,7 +197,7 @@ def claim_device(
             detail="Device disabled",
         )
 
-    if device.owner_id and device.owner_id != user.id:
+    if device.owner_id and not can_access_device(db,user,device):
         raise HTTPException(
             status_code=409,
             detail="Device already assigned",
@@ -330,7 +331,7 @@ def set_light(
 ):
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",
@@ -371,7 +372,7 @@ def audio_play(
 ):
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",
@@ -398,7 +399,7 @@ def audio_stop(
 ):
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",
@@ -426,7 +427,7 @@ def set_volume(
 ):
     device = locked_device(db,device_id=device_id)
 
-    if not device or device.owner_id != user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(
             status_code=404,
             detail="Device not found",

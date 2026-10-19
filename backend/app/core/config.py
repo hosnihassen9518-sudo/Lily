@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    trusted_proxy_ips: str = ""
+
     app_name: str = "Lily Device Platform API"
     environment: str = "development"
 

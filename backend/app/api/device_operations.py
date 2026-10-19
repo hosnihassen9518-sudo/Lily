@@ -1,3 +1,4 @@
+from app.services.access_sessions import can_access_device, can_access_home
 import base64, json, secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -93,7 +94,7 @@ def require_cleanup_complete(db,device):
 
 def owned(db,device_id,user):
     device=locked_device(db,device_id=device_id)
-    if not device or device.owner_id!=user.id:
+    if not device or not can_access_device(db,user,device):
         raise HTTPException(404,'Device not found')
     return device
 
@@ -136,7 +137,7 @@ def remove_device(device_id:int,user:User=Depends(get_current_user),db:Session=D
 
 def user_operation(db,operation_id,user):
     op=db.get(DeviceOperation,operation_id)
-    if not op or (op.requested_by_id!=user.id and not user.is_admin):
+    if not op or (op.requested_by_id!=user.id and not can_access_device(db,user,db.get(Device,op.device_id))):
         raise HTTPException(404,'Operation not found')
     return op
 

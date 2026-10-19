@@ -6,4 +6,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=6100,
         reload=True,
+        proxy_headers=False,
     )

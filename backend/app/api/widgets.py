@@ -1,6 +1,6 @@
 import hashlib,hmac
 from datetime import datetime,timezone
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,Depends,HTTPException,Request
 from pydantic import BaseModel,Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,6 +28,9 @@ class Power(BaseModel):
 def active_parent(db,session_id):
     row=db.scalar(select(MobileSession).where(MobileSession.id==session_id).with_for_update().execution_options(populate_existing=True))
     if not row or row.revoked_at or utc(row.expires_at)<=datetime.now(timezone.utc):raise HTTPException(401,'Widget session expired. Open Lily and sign in.')
+    from app.models.access_control import AccessSession
+    access=db.get(AccessSession,session_id)
+    if not access or access.revoked_at:raise HTTPException(401,"Widget parent session revoked")
     user=db.get(User,row.user_id)
     if not user or not user.is_active:raise HTTPException(401,'Inactive account')
     return row,user
@@ -44,10 +47,20 @@ def issue_widget(payload:Installation,user:User=Depends(get_current_user),creds:
     db.commit()
     return {'token':token,'expires_at':utc(parent.expires_at).isoformat()}
 
-def widget_user(creds:HTTPAuthorizationCredentials=Depends(bearer),db:Session=Depends(get_db)):
+def widget_user(request:Request,creds:HTTPAuthorizationCredentials=Depends(bearer),db:Session=Depends(get_db)):
     row=db.get(WidgetCredential,hashlib.sha256(creds.credentials.encode()).hexdigest())
     if not row:raise HTTPException(401,'Invalid widget credential')
-    return active_parent(db,row.session_id)[1]
+    parent,user=active_parent(db,row.session_id)
+    from app.models.access_control import AccessSession
+    from app.services.access_sessions import AuthContext
+    from app.services.route_policies import enforce_policy
+    access=db.get(AccessSession,parent.id)
+    context=AuthContext(user,access.id,frozenset(access.permissions),access.scope,"mobile")
+    request.state.access=context;request.state.access_db=db
+    enforce_policy(request,context)
+    from app.services.rate_limits import session_limit
+    session_limit(db,request,context);user._access=context
+    return user
 
 def projection(db,device):
     data=serialize_device(device,db);caps=data['smart_home']['capabilities']

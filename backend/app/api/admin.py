@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin
+from app.api.deps import require_admin,get_current_user
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.music import Music
@@ -182,21 +182,14 @@ def users(db: Session = Depends(get_db)):
 
 @router.patch("/users/{user_id}/active")
 def set_user_active(
-    user_id: int,
-    payload: ActiveUpdate,
-    db: Session = Depends(get_db),
+    user_id:int, payload:ActiveUpdate,
+    actor:User=Depends(get_current_user),
+    db:Session=Depends(get_db),
 ):
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user.is_admin and not payload.active:
-        raise HTTPException(
-            status_code=400,
-            detail="Administrator accounts cannot be disabled here",
-        )
-    user.is_active = payload.active
-    db.commit()
-    return {"id": user.id, "active": user.is_active}
+    from app.api.access_control import user_active
+    from app.schemas.access_control import UserStatus
+    return user_active(user_id,UserStatus(active=payload.active),actor,db)
+
 
 
 @router.get("/homes")
@@ -236,13 +229,14 @@ def inventory_config(device_id:int,db:Session=Depends(get_db)):
 
 EXPORT_FIELDS=['id','serial_number','name','model','hardware_version','status','owner_id','device_type','home_id','room_id','firmware_version','online','last_seen','last_connected_at','last_disconnected_at','activated_at','created_at','wifi_rssi','free_heap','free_storage','light_enabled','brightness','color_r','color_g','color_b','audio_loaded','audio_playing','volume']
 @router.get('/devices/export.csv')
-def export_devices(fields:str|None=None,db:Session=Depends(get_db)):
+def export_devices(fields:str|None=None,actor:User=Depends(get_current_user),db:Session=Depends(get_db)):
     import csv,io
     from app.api.devices import serialize_device
     from app.services.provisioning_archive import stored_config
     from fastapi.responses import Response
     columns=fields.split(',') if fields is not None else EXPORT_FIELDS
     if not columns or len(columns)!=len(set(columns)) or any(c not in EXPORT_FIELDS+['device_secret'] for c in columns):raise HTTPException(422,'Select valid, distinct export fields.')
+    if 'device_secret' in columns and 'inventory.export_secrets' not in actor._access.permissions:raise HTTPException(403,'Secret export permission required')
     output=io.StringIO();writer=csv.writer(output);writer.writerow(columns)
     for d in db.scalars(select(Device).order_by(Device.id)):
         data=serialize_device(d,db)
@@ -276,3 +270,9 @@ def resync_device(device_id:int,db:Session=Depends(get_db)):
     if not sent:raise HTTPException(503,'Broker unavailable. Resync was not sent.')
     db.commit()
     return {'ok':True,'detail':'State refresh requested and schedules resent. Credentials unchanged.'}
+
+
+@router.get('/inventory')
+def inventory_list(db:Session=Depends(get_db)):
+    from app.api.devices import serialize_device
+    return [serialize_device(d,db) for d in db.scalars(select(Device).where(Device.owner_id.is_(None)).order_by(Device.id))]

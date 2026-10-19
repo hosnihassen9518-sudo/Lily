@@ -10,7 +10,8 @@ from app.db.session import Base, get_db
 import app.models
 from app.main import app
 from app.models.user import User
-from app.core.security import create_access_token
+from app.services.access_sessions import issue_session
+from app.services.rbac import seed_access_control, assign_roles
 
 @pytest.fixture
 def db():
@@ -42,10 +43,11 @@ def client(db):
 def admin(db):
     user = User(email='admin@test.org', password_hash='unused', is_admin=True, is_active=True)
     db.add(user); db.commit()
-    return {'Authorization': 'Bearer ' + create_access_token(str(user.id))}
+    seed_access_control(db); assign_roles(db,user.id,['superuser']); db.commit()
+    return {'Authorization': 'Bearer ' + issue_session(db,user)['access_token']}
 
 @pytest.fixture
 def owner(db):
     user = User(email='owner@test.org', password_hash='unused', is_active=True)
     db.add(user); db.commit()
-    return user, {'Authorization': 'Bearer ' + create_access_token(str(user.id))}
+    return user, {'Authorization': 'Bearer ' + issue_session(db,user,auth_method='portal',permissions=__import__('app.services.permission_catalog',fromlist=['MOBILE_PERMISSIONS']).MOBILE_PERMISSIONS)['access_token']}
