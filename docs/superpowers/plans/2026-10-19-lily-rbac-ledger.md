@@ -25,4 +25,4 @@ Ruling: make the two pre-existing host-specific tests portable: explicitly skip 
 Verification: unfiltered backend 87 passed, 2 skipped (host g++ unavailable; PostgreSQL test environment unavailable); portal 14 passed and production build succeeds; Flutter 67 passed; both LED-strip and ordinary test-light builds succeed.
 Live preview: fresh isolated database; admin login, API role/key creation, exchange, credential aggregate 429, revocation 401, read-only denial 403, administrator revocation all pass. Browser confirms read-only navigation and disabled actions. No production data accessed.
 Deferred minors: none. PostgreSQL concurrency and deployment proxy/TLS have not been exercised against the user's live server.
-Task 7: verification and release documentation complete; GitHub push pending.
+Task 7: complete. GitHub feature branch pushed and remote commit ffca8b663782a1b71e6782f50b014c26605b282e verified. This final bookkeeping commit records that evidence. Production remains unchanged.
