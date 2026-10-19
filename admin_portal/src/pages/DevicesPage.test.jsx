@@ -4,6 +4,7 @@ import { describe,it,expect,vi,afterEach } from 'vitest';
 import { render,screen,fireEvent,waitFor,cleanup } from '@testing-library/react';
 import DevicesPage from './DevicesPage';
 import {api} from '../services/api';
+vi.mock('../context/AuthContext',()=>({useAuth:()=>({can:()=>true})}));
 vi.mock('../services/api',()=>({api:{devices:vi.fn(async()=>[]),deviceTypes:vi.fn(async()=>[{id:1,name:'Light'}]),deviceModels:vi.fn(async()=>[{key:'test',name:'Test light',device_type_id:1}]),generateDevice:vi.fn()}}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 describe('one-time factory credentials',()=>{

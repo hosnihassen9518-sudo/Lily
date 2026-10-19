@@ -684,3 +684,17 @@ td strong { display: block; }
 .model-features label { display: flex; align-items: flex-start; gap: 10px; }
 .model-features input { width: auto; margin-top: 3px; }
 .model-features small { display: block; margin-top: 4px; }
+
+/* Access management */
+.access-panel { padding:24px; margin-bottom:22px; }
+.access-actions { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:18px 0; }
+.access-role-choices { display:flex; flex-wrap:wrap; gap:14px; margin:18px 0; }
+.access-role-choices label,.access-check {display:flex; align-items:center; gap:8px;}
+.access-role-choices input,.access-check input,.permission-matrix input {width:18px;height:18px;accent-color:var(--primary,#7761bf);}
+.access-muted {display:block;color:#6d6c82;font-size:12px;margin-top:6px;}
+.permission-action {border:0;padding:0;margin:0;display:inline-flex;min-width:0;}
+.permission-action:disabled {opacity:.5;}
+.permission-matrix {font-size:12px;}
+.permission-matrix th {white-space:nowrap;}
+.access-panel textarea {width:100%;min-height:100px;font-family:monospace;margin-bottom:12px;}
+button:disabled {cursor:not-allowed;opacity:.55;}

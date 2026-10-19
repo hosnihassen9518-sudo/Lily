@@ -1,3 +1,4 @@
+import PermissionGate from "../components/PermissionGate";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Music2,
@@ -46,7 +47,7 @@ export default function MusicPage() {
     return tracks.filter((t) =>
       [t.title, t.description, t.filename]
         .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
+        .some((v) => String(v).toLowerCase().includes(q)),
     );
   }, [tracks, query]);
 
@@ -98,12 +99,19 @@ export default function MusicPage() {
       <div className="page-heading">
         <div>
           <h1>Music library</h1>
-          <p>Tracks available for users to download and transfer to their device.</p>
+          <p>
+            Tracks available for users to download and transfer to their device.
+          </p>
         </div>
-        <button className="primary-button" onClick={() => setShowUpload(true)}>
-          <Upload size={18} />
-          Upload MP3
-        </button>
+        <PermissionGate permission="music.create" action>
+          <button
+            className="primary-button"
+            onClick={() => setShowUpload(true)}
+          >
+            <Upload size={18} />
+            Upload MP3
+          </button>
+        </PermissionGate>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -142,24 +150,42 @@ export default function MusicPage() {
                   <tr key={track.id}>
                     <td>
                       <strong>{track.title}</strong>
-                      <span className="muted-cell">{track.description || "No description"}</span>
+                      <span className="muted-cell">
+                        {track.description || "No description"}
+                      </span>
                     </td>
                     <td>{track.filename}</td>
                     <td>{formatBytes(track.filesize)}</td>
                     <td>
-                      <span className={`status-badge ${track.enabled ? "success" : "neutral"}`}>
+                      <span
+                        className={`status-badge ${track.enabled ? "success" : "neutral"}`}
+                      >
                         {track.enabled ? "AVAILABLE" : "HIDDEN"}
                       </span>
                     </td>
                     <td className="mono checksum">{track.checksum_sha256}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="icon-button" onClick={() => toggle(track)}>
-                          {track.enabled ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                        <button className="icon-button danger-text" onClick={() => remove(track)}>
-                          <Trash2 size={18} />
-                        </button>
+                        <PermissionGate permission="music.change" action>
+                          <button
+                            className="icon-button"
+                            onClick={() => toggle(track)}
+                          >
+                            {track.enabled ? (
+                              <EyeOff size={18} />
+                            ) : (
+                              <Eye size={18} />
+                            )}
+                          </button>
+                        </PermissionGate>
+                        <PermissionGate permission="music.delete" action>
+                          <button
+                            className="icon-button danger-text"
+                            onClick={() => remove(track)}
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </PermissionGate>
                       </div>
                     </td>
                   </tr>
@@ -181,7 +207,11 @@ export default function MusicPage() {
           <form className="form-grid" onSubmit={submitUpload}>
             <label>
               Title
-              <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
             </label>
 
             <label>
@@ -204,12 +234,18 @@ export default function MusicPage() {
             </label>
 
             <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setShowUpload(false)}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowUpload(false)}
+              >
                 Cancel
               </button>
-              <button className="primary-button" disabled={uploading}>
-                {uploading ? "Uploading..." : "Upload"}
-              </button>
+              <PermissionGate permission="music.create" action>
+                <button className="primary-button" disabled={uploading}>
+                  {uploading ? "Uploading..." : "Upload"}
+                </button>
+              </PermissionGate>
             </div>
           </form>
         </Modal>

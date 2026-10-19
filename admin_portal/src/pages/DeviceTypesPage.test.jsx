@@ -4,6 +4,7 @@ import {it,expect,vi,beforeEach,afterEach} from 'vitest';
 import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import DeviceTypesPage from './DeviceTypesPage';
 import {api} from '../services/api';
+vi.mock('../context/AuthContext',()=>({useAuth:()=>({can:()=>true})}));
 vi.mock('../services/api',()=>({api:{deviceTypes:vi.fn(),deviceModels:vi.fn(),deviceFeatures:vi.fn(),createDeviceModel:vi.fn(),updateDeviceModel:vi.fn(),deleteDeviceModel:vi.fn()}}));
 beforeEach(()=>{
  api.deviceTypes.mockResolvedValue([{id:1,key:'light',name:'Light',capabilities:[]}]);

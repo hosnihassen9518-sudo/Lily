@@ -1,0 +1,4 @@
+// @vitest-environment jsdom
+import React from 'react';import {it,expect,vi,afterEach} from 'vitest';import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';import SessionsPage from './SessionsPage';import {api} from '../services/api';
+vi.mock('../context/AuthContext',()=>({useAuth:()=>({user:{id:5,session_id:'session12345'},can:()=>true})}));vi.mock('../services/api',()=>({api:{access:vi.fn()}}));afterEach(()=>{cleanup();vi.resetAllMocks();});
+it('revokes the selected session through the server',async()=>{api.access.mockImplementation(async(path,method)=>method==='DELETE'?{ok:true}:[{id:'session12345',user_id:5,auth_method:'portal',created_at:'2026-10-19',expires_at:'2030-01-01',last_activity:'2026-10-19'}]);render(<SessionsPage/>);fireEvent.click(await screen.findByRole('button',{name:'Revoke session1'}));await waitFor(()=>expect(api.access).toHaveBeenCalledWith('/access/sessions/session12345','DELETE'));});

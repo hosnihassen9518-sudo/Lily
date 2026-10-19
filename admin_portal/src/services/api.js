@@ -5,7 +5,9 @@ async function request(path, options = {}) {
   const token = localStorage.getItem("lily_admin_token");
 
   const headers = {
-    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    ...(options.body instanceof FormData
+      ? {}
+      : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
@@ -28,6 +30,8 @@ async function request(path, options = {}) {
       const data = await response.json();
       message = data.detail || data.message || message;
     } catch {}
+    if (response.status === 429)
+      message = `Too many requests. Try again in ${response.headers.get("Retry-After") || "a few"} seconds.`;
     throw new Error(message);
   }
 
@@ -41,8 +45,17 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  mobileSessionPolicy: () => request('/admin/mobile-session-policy'),
-  setMobileSessionPolicy: (payload) => request('/admin/mobile-session-policy', {method:'PATCH',body:JSON.stringify(payload)}),
+  access: (path, method = "GET", payload) =>
+    request(path, {
+      method,
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    }),
+  mobileSessionPolicy: () => request("/admin/mobile-session-policy"),
+  setMobileSessionPolicy: (payload) =>
+    request("/admin/mobile-session-policy", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   login: (email, password) =>
     request("/auth/login", {
       method: "POST",
@@ -54,10 +67,11 @@ export const api = {
   dashboard: () => request("/admin/dashboard"),
   homes: () => request("/admin/homes"),
   deviceTypes: () => request("/device-types"),
-  createDeviceType: (payload) => request("/admin/device-types", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }),
+  createDeviceType: (payload) =>
+    request("/admin/device-types", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   users: () => request("/admin/users"),
   setUserActive: (userId, active) =>
     request(`/admin/users/${userId}/active`, {
@@ -65,16 +79,37 @@ export const api = {
       body: JSON.stringify({ active }),
     }),
 
-  deviceCredentials: (id) => request(`/admin/device-inventory/${id}/credentials`),
+  deviceCredentials: (id) =>
+    request(`/admin/device-inventory/${id}/credentials`),
   downloadDeviceConfig: (id) => request(`/admin/device-inventory/${id}/config`),
-  resyncDevice: (id) => request(`/admin/device-inventory/${id}/resync`, {method:'POST'}),
-  exportDevices: (fields) => request('/admin/devices/export.csv'+(fields ? '?fields='+encodeURIComponent(fields.join(',')) : '')),
-  deviceModels: () => request('/admin/device-models'),
-  deviceFeatures: () => request('/admin/device-features'),
-  createDeviceModel: (payload) => request('/admin/device-models', {method:'POST',body:JSON.stringify(payload)}),
-  updateDeviceModel: (key,payload) => request(`/admin/device-models/${encodeURIComponent(key)}`, {method:'PATCH',body:JSON.stringify(payload)}),
-  deleteDeviceModel: (key) => request(`/admin/device-models/${encodeURIComponent(key)}`, {method:'DELETE'}),
-  generateDevice: (payload) => request('/admin/device-inventory', {method: 'POST', body: JSON.stringify(payload)}),
+  resyncDevice: (id) =>
+    request(`/admin/device-inventory/${id}/resync`, { method: "POST" }),
+  exportDevices: (fields) =>
+    request(
+      "/admin/devices/export.csv" +
+        (fields ? "?fields=" + encodeURIComponent(fields.join(",")) : ""),
+    ),
+  deviceModels: () => request("/admin/device-models"),
+  deviceFeatures: () => request("/admin/device-features"),
+  createDeviceModel: (payload) =>
+    request("/admin/device-models", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateDeviceModel: (key, payload) =>
+    request(`/admin/device-models/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteDeviceModel: (key) =>
+    request(`/admin/device-models/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    }),
+  generateDevice: (payload) =>
+    request("/admin/device-inventory", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   devices: () => request("/devices/admin/all"),
   createDevice: (payload) =>
     request("/devices/admin", {
