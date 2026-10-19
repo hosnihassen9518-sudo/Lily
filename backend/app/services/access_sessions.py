@@ -39,6 +39,8 @@ def issue_session(
     lock_security(db)
     now = datetime.now(timezone.utc)
     roles = roles_for(db, user.id)
+    if len(roles) > 1:
+        raise HTTPException(403, "Account has multiple roles; a superuser must select one role")
     grants = effective_permissions(db, user.id)
     if auth_method == "mobile":
         grants = (grants & MOBILE_PERMISSIONS) if roles else set(MOBILE_PERMISSIONS)

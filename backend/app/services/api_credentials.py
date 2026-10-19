@@ -57,8 +57,8 @@ def create_credential(db, actor, name, role_keys, scope, expires_at, rate_limit=
     lock_security(db)
     if utc(expires_at) <= datetime.now(timezone.utc):
         raise HTTPException(422, "Expiry must be in the future")
-    if not role_keys:
-        raise HTTPException(422, "Select at least one API role")
+    if len(role_keys) != 1:
+        raise HTTPException(422, "Select exactly one API role")
     roles = [db.get(Role, k) for k in set(role_keys)]
     if any(r is None or r.audience != "api" for r in roles):
         raise HTTPException(422, "API roles required")

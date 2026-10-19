@@ -35,26 +35,9 @@ export default function ApiAccessPage() {
     load();
   }, []);
   function choices(value, change) {
-    return (
-      <div className="access-role-choices">
-        {roles.map((r) => (
-          <label key={r.key}>
-            <input
-              type="checkbox"
-              checked={value.includes(r.key)}
-              onChange={(e) =>
-                change(
-                  e.target.checked
-                    ? [...value, r.key]
-                    : value.filter((k) => k !== r.key),
-                )
-              }
-            />
-            {r.name}
-          </label>
-        ))}
-      </div>
-    );
+    return <label>Assigned role<select aria-label="Assigned role" value={value.length === 1 ? value[0] : ""} onChange={e=>change(e.target.value ? [e.target.value] : [])}>
+      <option value="">No role</option>{roles.map(r=><option key={r.key} value={r.key}>{r.name}</option>)}
+    </select>{value.length > 1 && <span role="alert">Multiple roles detected. Select one role to resolve.</span>}</label>;
   }
   function ids(text) {
     if (!text.trim()) return [];

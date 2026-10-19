@@ -60,6 +60,10 @@ def seed_access_control(db):
     if not db.get(AppSetting, "rbac_lock"):
         db.add(AppSetting(key="rbac_lock", value_json={}))
     db.flush()
+    from sqlalchemy import func
+    conflicts = list(db.scalars(select(RoleAssignment.user_id).group_by(RoleAssignment.user_id).having(func.count() > 1)))
+    for uid in conflicts:
+        revoke_principal_sessions(db, uid)
 
 
 def edit_role(db, key, values):
@@ -138,6 +142,8 @@ def revoke_principal_sessions(db, user_id):
 
 
 def assign_roles(db, user_id, keys, audience="portal"):
+    if len(keys) > 1:
+        raise HTTPException(422, "Only one role may be assigned at a time")
     roles = [db.get(Role, k) for k in set(keys)]
     if any(r is None or r.audience != audience for r in roles):
         raise HTTPException(422, "Invalid role audience")

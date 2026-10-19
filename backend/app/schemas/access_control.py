@@ -18,7 +18,7 @@ class RoleEdit(Strict):
 
 
 class Assignment(Strict):
-    roles: list[str] = Field(max_length=50)
+    roles: list[str] = Field(max_length=1)
 
 
 class Ceiling(Strict):
@@ -28,7 +28,7 @@ class Ceiling(Strict):
 class UserInput(Strict):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=12, max_length=72)
-    roles: list[str] = Field(default_factory=list, max_length=50)
+    roles: list[str] = Field(default_factory=list, max_length=1)
 
 
 class UserStatus(Strict):
@@ -43,7 +43,7 @@ class ResourceScope(Strict):
 
 class CredentialInput(Strict):
     name: str = Field(min_length=1, max_length=120)
-    roles: list[str] = Field(max_length=50)
+    roles: list[str] = Field(max_length=1)
     scope: ResourceScope
     expires_at: datetime
     rate_limit: int = Field(default=120, ge=1, le=100000)

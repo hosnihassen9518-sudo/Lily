@@ -2,7 +2,7 @@
 
 ## Roles and scope
 
-Roles combine grants by union. Unassigned permissions are denied. Predefined Superuser,
+Each account or API credential may have at most one assigned role. Unassigned permissions are denied. Predefined Superuser,
 Administrator, Operator and Read-only definitions cannot be edited/deleted; custom portal
 and API roles are editable. The portal matrix comes from GET /api/v1/access/permissions.
 Only actions actually supported by a feature appear. Account removal uses disabling
@@ -127,3 +127,5 @@ The basic Compose stack serves HTTP on portal port 6080 and backend port 6100. I
 Administrator has all operational device permissions, including provisioning, factory secret/config export and global device/home scope. Administrator does not receive account, role, API role, API credential or delegation management permissions. Superuser retains those additional controls. On startup, predefined role definitions are synchronized to the shipped definitions; changed definitions revoke affected sessions, requiring a fresh login.
 
 Devices support PATCH /api/v1/devices/admin/{id}/model with model_key, guarded by devices.change and resource access. It accepts compatible firmware targets and hardware revisions, updates the model/type association, preserves credentials and ownership, and audits the change. It does not reflash firmware or rewrite the archived factory configuration. Fresh inventory accepts an optional name.
+
+Role assignment and account/credential creation reject multiple roles. Existing conflicting assignments are preserved for superuser correction; their sessions are revoked on startup and new login is blocked until one role is selected. Removing the last active superuser remains prohibited.
