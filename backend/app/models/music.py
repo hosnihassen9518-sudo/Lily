@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, Integer
+from sqlalchemy import String, Boolean, DateTime, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
 
@@ -7,6 +7,7 @@ class Music(Base):
     __tablename__ = "music"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     filename: Mapped[str] = mapped_column(String(255))

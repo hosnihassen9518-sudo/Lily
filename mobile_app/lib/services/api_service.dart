@@ -446,6 +446,51 @@ class ApiService {
     return response.bodyBytes;
   }
 
+  Future<MusicTrack> uploadPrivateMusic(
+      {required String filename, required Uint8List bytes}) async {
+    if (!filename.toLowerCase().endsWith('.mp3') || bytes.isEmpty) {
+      throw ArgumentError('Choose a nonempty MP3 file.');
+    }
+    if (bytes.length > 20 * 1024 * 1024) {
+      throw ArgumentError('Choose an MP3 of 20 MB or less.');
+    }
+    final rev = _revision, url = baseUrl;
+    Future<http.Response> send() async {
+      _checkRevision(rev, url);
+      final request =
+          http.MultipartRequest('POST', Uri.parse('$url/music/private'));
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      request.files
+          .add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      return http.Response.fromStream(
+              await _client.send(request).timeout(const Duration(minutes: 3)))
+          .timeout(const Duration(minutes: 3));
+    }
+
+    if (_session != null && _expired('access_expires_at')) {
+      await _refreshSession();
+    }
+    var response = await send();
+    _checkRevision(rev, url);
+    if (response.statusCode == 401 && _session != null) {
+      await _refreshSession();
+      response = await send();
+      _checkRevision(rev, url);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Upload failed (${response.statusCode}).';
+      try {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['detail'] is String) {
+          message = data['detail'] as String;
+        }
+      } catch (_) {}
+      throw ApiException(response.statusCode, message);
+    }
+    return MusicTrack.fromJson(
+        (jsonDecode(response.body) as Map).cast<String, dynamic>());
+  }
+
   Future<List<Map<String, dynamic>>> getSchedules(int deviceId) async {
     final response = await _send('GET', '/schedules/device/$deviceId');
     if (response.statusCode != 200) {

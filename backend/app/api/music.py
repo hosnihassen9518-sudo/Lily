@@ -12,7 +12,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
@@ -23,6 +23,52 @@ from app.models.user import User
 from app.schemas.admin import EnabledUpdate
 
 router = APIRouter(prefix="/music", tags=["music"])
+
+
+def serialize_track(track):
+    return {'id': track.id, 'title': track.title, 'description': track.description,
+            'filename': track.filename, 'filesize': track.filesize,
+            'checksum_sha256': track.checksum_sha256, 'is_private': track.owner_id is not None}
+
+
+@router.post('/private')
+async def upload_private_music(file: UploadFile = File(...),
+                               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    filename = (file.filename or '').replace('\\', '/').split('/')[-1][:255]
+    if not filename.lower().endswith('.mp3'):
+        raise HTTPException(400, 'Only MP3 files are accepted')
+    limit = settings.max_music_size_mb * 1024 * 1024
+    if file.size is not None and file.size > limit:
+        raise HTTPException(413, f'File exceeds {settings.max_music_size_mb} MB')
+    directory = Path(settings.music_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (uuid4().hex + '.mp3')
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with path.open('xb') as target:
+            while chunk := await file.read(64 * 1024):
+                if total == 0 and not (chunk.startswith(b'ID3') or
+                        (len(chunk) >= 2 and chunk[0] == 255 and chunk[1] & 224 == 224)):
+                    raise HTTPException(422, 'The selected file does not have an MP3 header')
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(413, f'File exceeds {settings.max_music_size_mb} MB')
+                digest.update(chunk)
+                target.write(chunk)
+        if total == 0:
+            raise HTTPException(422, 'The selected MP3 is empty')
+        track = Music(owner_id=user.id, title=Path(filename).stem[:200] or 'Audio',
+                      filename=filename, storage_path=str(path), filesize=total,
+                      checksum_sha256=digest.hexdigest(), enabled=True)
+        db.add(track); db.commit(); db.refresh(track)
+        return serialize_track(track)
+    except BaseException:
+        db.rollback()
+        path.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
 
 
 @router.get('/{music_id}/device.mp3')
@@ -44,7 +90,7 @@ def device_media(music_id: int, token: str, db: Session = Depends(get_db)):
         raise HTTPException(403, 'Invalid or expired device media authorization')
     require_features(db, device, 'audio')
     track = db.get(Music, music_id)
-    if not track or not track.enabled:
+    if not track or not track.enabled or (track.owner_id is not None and track.owner_id != device.owner_id):
         raise HTTPException(404, 'Music not found')
     if not Path(track.storage_path).is_file():
         raise HTTPException(410, 'Music file missing from storage')
@@ -58,21 +104,11 @@ def list_music(
 ):
     tracks = db.scalars(
         select(Music)
-        .where(Music.enabled == True)
+        .where(Music.enabled == True, or_(Music.owner_id.is_(None), Music.owner_id == user.id))
         .order_by(Music.title)
     ).all()
 
-    return [
-        {
-            "id": track.id,
-            "title": track.title,
-            "description": track.description,
-            "filename": track.filename,
-            "filesize": track.filesize,
-            "checksum_sha256": track.checksum_sha256,
-        }
-        for track in tracks
-    ]
+    return [serialize_track(track) for track in tracks]
 
 @router.get("/{music_id}/download")
 def download_music(
@@ -82,7 +118,7 @@ def download_music(
 ):
     music = db.get(Music, music_id)
 
-    if not music or not music.enabled:
+    if not music or not music.enabled or (music.owner_id is not None and music.owner_id != user.id):
         raise HTTPException(
             status_code=404,
             detail="Music not found",
@@ -167,7 +203,7 @@ def admin_list_music(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    tracks = db.scalars(select(Music).order_by(Music.created_at.desc())).all()
+    tracks = db.scalars(select(Music).where(Music.owner_id.is_(None)).order_by(Music.created_at.desc())).all()
     return [
         {
             "id": track.id,
@@ -190,7 +226,7 @@ def admin_set_music_enabled(
     db: Session = Depends(get_db),
 ):
     music = db.get(Music, music_id)
-    if not music:
+    if not music or music.owner_id is not None:
         raise HTTPException(status_code=404, detail="Music not found")
 
     music.enabled = payload.enabled
@@ -204,7 +240,7 @@ def admin_delete_music(
     db: Session = Depends(get_db),
 ):
     music = db.get(Music, music_id)
-    if not music:
+    if not music or music.owner_id is not None:
         raise HTTPException(status_code=404, detail="Music not found")
 
     path = music.storage_path

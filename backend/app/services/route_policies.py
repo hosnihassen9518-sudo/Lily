@@ -53,6 +53,7 @@ POLICIES = {
         "download_music": "music.export",
         "device_media": "device",
         "upload_music": "music.create",
+        "upload_private_music": "music.create",
         "admin_list_music": "music.read",
         "admin_set_music_enabled": "music.change",
         "admin_delete_music": "music.delete",

@@ -24,6 +24,22 @@ before application startup with that header, despite successful write verificati
 
 ## Playback
 
+### Phone files (app 0.10.4+13)
+
+Open an audio device and tap **Choose music**. **Choose MP3 from phone** opens
+the system file picker. The selected MP3 (up to 20MiB) uploads privately to the
+configured Lily server and appears in **My files**; shared tracks appear under
+**Server catalog**. After upload, choose Play and Auto or Stream. Upload completion
+means the file is on the server; playback begins only after a device command.
+Private files can be played only on devices owned by that account. Other accounts
+cannot list, download, or select them, and they are excluded from the shared admin
+music catalog. Existing firmware 2.0.0 handles both sources without reflashing.
+
+Deploy the backend before using this app update. Startup applies the
+`20261103_private_music` migration, adding nullable ownership to music tracks;
+existing tracks remain shared. Back up the server database before deployment.
+Bluetooth audio and external receiver integration are deferred.
+
 In the Music catalog, choose Play, then **Auto: store or stream** or
 **Stream over Wi-Fi**. The server sends a catalog selection over MQTT, and
 the device fetches media directly from its configured backend over Wi-Fi.
@@ -82,7 +98,8 @@ curl --fail http://127.0.0.1:6100/health
 The update seeds Lily V2 without replacing an existing model or its selected
 capabilities. It adds `POST /api/v1/devices/{device_id}/audio/catalog` and
 `GET /api/v1/music/{music_id}/device.mp3`; check that both appear in the live API
-documentation after rebuilding. No new database columns are required for audio.
+documentation after rebuilding. The phone-file update also adds `POST /api/v1/music/private`
+and applies the ownership migration described above.
 Do not remove the existing database, music volume, signing key or MQTT data.
 
 The physical board on COM7 has already been flashed and boot-verified as

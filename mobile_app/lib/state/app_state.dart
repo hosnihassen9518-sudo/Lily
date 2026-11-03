@@ -88,7 +88,8 @@ class AppState extends ChangeNotifier {
                 'description': m.description,
                 'filename': m.filename,
                 'filesize': m.filesize,
-                'checksum_sha256': m.checksum
+                'checksum_sha256': m.checksum,
+                'is_private': m.isPrivate
               })
           .toList()
     };

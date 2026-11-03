@@ -21,6 +21,7 @@ void main() {
       if(offline)return http.Response('unavailable',503);
       if(r.url.path.endsWith('/auth/me'))return http.Response(jsonEncode({'id':1,'email':'cache@test.org'}),200);
       if(r.url.path.endsWith('/devices'))return http.Response(jsonEncode([{'id':1,'serial_number':'CACHE-DEVICE','status':'RESET_PENDING','online':true,'generation':2}]),200);
+      if(r.url.path.endsWith('/music'))return http.Response('[{"id":4,"title":"Private rain","is_private":true}]',200);
       return http.Response('[]',200);
     });
     final first=AppState(api:ApiService(client:client,sessionStore:store));
@@ -38,6 +39,7 @@ void main() {
     expect(second.devices.single.status,'RESET_PENDING');
     expect(second.devices.single.online,isFalse);
     expect(second.devices.single.generation,2);
+    expect(second.music.single.isPrivate,isTrue);
     await second.logout();
     expect(store.data,isNull);
     expect(prefs.getString('session_cache'),isNull);

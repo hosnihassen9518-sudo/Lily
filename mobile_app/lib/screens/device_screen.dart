@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 
 import 'schedules_screen.dart';
 import 'device_configuration_screen.dart';
+import 'music_screen.dart';
 
 class DeviceScreen extends StatefulWidget {
   final int deviceId;
@@ -229,6 +230,14 @@ class _DeviceScreenState extends State<DeviceScreen> {
                                 : Colors.grey.shade600)),
                     const SizedBox(height: 12),
                     Wrap(spacing: 8, runSpacing: 8, children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => MusicScreen(deviceId: d.id))),
+                        icon: const Icon(Icons.library_music),
+                        label: const Text('Choose music'),
+                      ),
                       FilledButton.icon(
                         onPressed: d.online &&
                                 (d.audioLoaded || d.streamAvailable) &&
@@ -269,7 +278,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: Text(
-                            'Music installation remains available from the Music library on mobile.',
+                            'Choose music to browse server tracks or upload an MP3 from your phone.',
                             style: TextStyle(color: Colors.grey.shade600)),
                       ),
                   ],

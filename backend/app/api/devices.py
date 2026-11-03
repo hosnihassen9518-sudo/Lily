@@ -453,8 +453,10 @@ def audio_catalog(device_id: int, payload: CatalogAudioCommand,
     if 'music.export' not in user._access.permissions:
         raise HTTPException(403, 'Permission required: music.export')
     track = db.get(Music, payload.music_id)
-    if not track or not track.enabled:
+    if not track or not track.enabled or (track.owner_id is not None and track.owner_id != user.id):
         raise HTTPException(404, 'Music not found')
+    if track.owner_id is not None and device.owner_id != track.owner_id:
+        raise HTTPException(403, 'Private files can only play on your own devices')
     if not Path(track.storage_path).is_file():
         raise HTTPException(410, 'Music file missing from storage')
     generation = device_generation(db, device)
