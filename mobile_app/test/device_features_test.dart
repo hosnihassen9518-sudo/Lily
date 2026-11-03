@@ -54,9 +54,8 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: MusicScreen()))));
     expect(find.text('Add an audio-capable Lily device to install music.'),
         findsOneWidget);
-    final button = tester
-        .widget<PopupMenuButton<String>>(find.byType(PopupMenuButton<String>));
-    expect(button.enabled, isFalse);
+    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play'));
+    expect(button.onPressed, isNull);
   });
   testWidgets(
       'Configuration saves rename and Location then requires removal confirmation',

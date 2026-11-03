@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/music_track.dart';
 import '../state/app_state.dart';
+import '../theme/lily_theme.dart';
+import '../widgets/playback_refresher.dart';
 
 class MusicScreen extends StatefulWidget {
   final int? deviceId;
@@ -17,6 +19,10 @@ class MusicScreen extends StatefulWidget {
 class _MusicScreenState extends State<MusicScreen> {
   bool busy = false;
   String? status;
+  String query = '';
+  bool showPrivate = false;
+  bool streamOnly = false;
+  bool statusIsError = false;
   Future<void> choosePhoneFile() async {
     final state = context.read<AppState>();
     final backend = state.api.baseUrl, session = state.api.sessionIdentity;
@@ -27,6 +33,7 @@ class _MusicScreenState extends State<MusicScreen> {
     setState(() {
       busy = true;
       status = null;
+      statusIsError = false;
     });
     try {
       final PlatformFile? file;
@@ -72,12 +79,18 @@ class _MusicScreenState extends State<MusicScreen> {
         ...state.music.where((item) => item.id != track.id),
         track
       ];
-      setState(() => status =
-          '${track.title} saved in My files. Choose Play to send it to Lily.');
+      setState(() {
+        showPrivate = true;
+        query = '';
+        status =
+            '${track.title} saved in My files. Choose Play to send it to Lily.';
+      });
     } catch (error) {
       if (current()) {
-        setState(
-            () => status = error.toString().replaceFirst('Exception: ', ''));
+        setState(() {
+          statusIsError = true;
+          status = error.toString().replaceFirst('Exception: ', '');
+        });
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -143,18 +156,24 @@ class _MusicScreenState extends State<MusicScreen> {
 
     setState(() {
       busy = true;
-      status = 'Requesting ${track.title}...';
+      statusIsError = false;
+      status = 'Starting ${track.title}...';
     });
 
     try {
       await state.api.selectCatalogAudio(targetDevice.id, track.id, mode: mode);
       if (!isCurrentSession()) return;
-      await state.refresh();
+      await state.refreshDevices();
       if (!isCurrentSession()) return;
       setState(() => status =
           'Playback requested on ${targetDevice.displayName}. Check the device for download or playback status.');
     } catch (e) {
-      if (isCurrentSession()) setState(() => status = e.toString());
+      if (isCurrentSession()) {
+        setState(() {
+          statusIsError = true;
+          status = e.toString();
+        });
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -163,105 +182,187 @@ class _MusicScreenState extends State<MusicScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-
-    final hasAudioDevice = state.devices.any((d) =>
-        d.supportsAudio &&
-        (widget.deviceId == null || d.id == widget.deviceId));
-    return RefreshIndicator(
-      onRefresh: state.refresh,
-      child: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Text(
-            'Music',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+    final devices = state.devices
+        .where((d) =>
+            d.supportsAudio &&
+            (widget.deviceId == null || d.id == widget.deviceId))
+        .toList();
+    final hasAudioDevice = devices.isNotEmpty;
+    final online = devices.any((d) => d.online);
+    final selectedDevice = devices.length == 1 ? devices.first : null;
+    final tracks = state.music
+        .where((track) =>
+            track.isPrivate == showPrivate &&
+            ('${track.title} ${track.filename}')
+                .toLowerCase()
+                .contains(query.toLowerCase()))
+        .toList();
+    return Theme(
+      data: LilyTheme.light,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3EFFB),
+        appBar: widget.deviceId == null
+            ? null
+            : AppBar(title: const Text('Choose audio')),
+        body: PlaybackRefresher(
+          child: RefreshIndicator(
+            onRefresh: state.refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(18),
+              children: [
+                if (widget.deviceId == null) ...[
+                  Text('Music',
+                      style: LilyTheme.light.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 16),
+                ],
+                Card(
+                    child: ListTile(
+                  leading: Icon(online ? Icons.speaker : Icons.volume_off),
+                  title: Text(selectedDevice?.displayName ??
+                      (hasAudioDevice
+                          ? 'Choose Lily when you press Play'
+                          : 'No audio device')),
+                  subtitle: Text(online
+                      ? 'Ready to play'
+                      : hasAudioDevice
+                          ? 'Lily is offline. Connect it to play audio.'
+                          : 'Add an audio-capable Lily device to install music.'),
+                )),
+                const SizedBox(height: 16),
+                TextField(
+                  decoration: const InputDecoration(
+                      labelText: 'Search audio',
+                      hintText: 'Search by name',
+                      prefixIcon: Icon(Icons.search)),
+                  onChanged: (value) => setState(() => query = value),
                 ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Play over Wi-Fi. Auto stores one MP3 when space allows, otherwise streams.',
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-          if (!hasAudioDevice)
-            const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child:
-                    Text('Add an audio-capable Lily device to install music.')),
-          if (status != null) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(status!),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          FilledButton.icon(
-              onPressed: busy ? null : choosePhoneFile,
-              icon: const Icon(Icons.audio_file),
-              label: const Text('Choose MP3 from phone')),
-          const SizedBox(height: 8),
-          const Text(
-              'Selected files are uploaded privately to your Lily server. MP3, up to 20 MB.'),
-          const SizedBox(height: 18),
-          Text('My files', style: Theme.of(context).textTheme.titleMedium),
-          if (!state.music.any((track) => track.isPrivate))
-            const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No private files uploaded yet.')),
-          ...state.music
-              .where((track) => track.isPrivate)
-              .map((track) => trackCard(track, hasAudioDevice)),
-          const SizedBox(height: 18),
-          Text('Server catalog',
-              style: Theme.of(context).textTheme.titleMedium),
-          if (!state.music.any((track) => !track.isPrivate))
-            const Card(
-                child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('No music in the server catalog yet.'),
-                          SizedBox(height: 8),
+                const SizedBox(height: 14),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('My files')),
+                    ButtonSegment(value: false, label: Text('Server catalog'))
+                  ],
+                  selected: {showPrivate},
+                  onSelectionChanged: (value) =>
+                      setState(() => showPrivate = value.single),
+                ),
+                const SizedBox(height: 12),
+                if (showPrivate || state.music.isEmpty)
+                  OutlinedButton.icon(
+                      onPressed: busy ? null : choosePhoneFile,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Choose MP3 from phone')),
+                if (status != null) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                      child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (busy)
+                                  const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                else
+                                  Icon(
+                                      statusIsError
+                                          ? Icons.error_outline
+                                          : Icons.check_circle_outline,
+                                      color: statusIsError
+                                          ? Colors.red.shade700
+                                          : LilyTheme.lavender),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(status!)),
+                              ]))),
+                ],
+                if (selectedDevice?.audioDownloading == true) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                  const Text('Saving audio to Lily...'),
+                ],
+                if (selectedDevice?.audioError?.isNotEmpty == true)
+                  Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(selectedDevice!.audioError!,
+                          style: TextStyle(color: Colors.red.shade700))),
+                const SizedBox(height: 12),
+                if (tracks.isEmpty)
+                  Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 24, horizontal: 8),
+                      child: Column(children: [
+                        Icon(
+                            query.isNotEmpty
+                                ? Icons.search_off
+                                : Icons.library_music_outlined,
+                            size: 36,
+                            color: LilyTheme.lavender),
+                        const SizedBox(height: 12),
+                        Text(query.isNotEmpty
+                            ? 'No matching audio.'
+                            : showPrivate
+                                ? 'No private files uploaded yet.'
+                                : 'No music in the server catalog yet.'),
+                        const SizedBox(height: 8),
+                        if (query.isEmpty)
                           Text(
-                              'Add MP3 tracks in the admin portal Music section, then refresh this page.'),
-                        ]))),
-          ...state.music
-              .where((track) => !track.isPrivate)
-              .map((track) => trackCard(track, hasAudioDevice)),
-        ],
+                              showPrivate
+                                  ? 'Add an MP3 from your phone. Only your account can see it.'
+                                  : 'Add tracks in the admin portal, then pull down to refresh.',
+                              textAlign: TextAlign.center),
+                      ])),
+                ...tracks.map((track) => trackCard(track, online)),
+                const SizedBox(height: 16),
+                Card(
+                    child: ExpansionTile(
+                  title: const Text('Playback options'),
+                  subtitle: Text(streamOnly
+                      ? 'Always stream over Wi-Fi'
+                      : 'Save when space allows'),
+                  children: [
+                    SwitchListTile(
+                        title: const Text('Always stream over Wi-Fi'),
+                        subtitle: const Text(
+                            'Otherwise, Lily saves the track when it fits.'),
+                        value: streamOnly,
+                        onChanged: (value) =>
+                            setState(() => streamOnly = value))
+                  ],
+                )),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget trackCard(MusicTrack track, bool hasAudioDevice) => Card(
+  Widget trackCard(MusicTrack track, bool online) => Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: ListTile(
-          leading: const CircleAvatar(child: Icon(Icons.music_note)),
-          title: Text(
-            track.title,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          leading: const CircleAvatar(
+              backgroundColor: Color(0xFFE9E1F6),
+              foregroundColor: LilyTheme.lavender,
+              child: Icon(Icons.music_note)),
+          title: Text(track.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(
-            track.description ?? track.filename,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: PopupMenuButton<String>(
-            enabled: !busy && hasAudioDevice,
-            tooltip: 'Choose playback mode',
-            onSelected: (mode) => installTrack(track, mode: mode),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                  value: 'auto', child: Text('Auto: store or stream')),
-              PopupMenuItem(value: 'stream', child: Text('Stream over Wi-Fi')),
-            ],
-            child:
-                const Padding(padding: EdgeInsets.all(12), child: Text('Play')),
-          ),
+              '${(track.filesize / (1024 * 1024)).toStringAsFixed(1)} MB · ${track.isPrivate ? 'Private file' : 'Catalog'}'),
+          trailing: FilledButton(
+              onPressed: busy || !online
+                  ? null
+                  : () =>
+                      installTrack(track, mode: streamOnly ? 'stream' : 'auto'),
+              child: const Text('Play')),
         ),
       );
 }

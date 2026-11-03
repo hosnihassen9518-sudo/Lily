@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
 import '../state/app_state.dart';
+import '../theme/lily_theme.dart';
+import '../widgets/playback_refresher.dart';
 
 import 'schedules_screen.dart';
 import 'device_configuration_screen.dart';
@@ -101,212 +103,228 @@ class _DeviceScreenState extends State<DeviceScreen> {
     final d = matches.first;
     initialize(d);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(children: [
-          Expanded(child: Text(d.displayName)),
-          const SizedBox(width: 12),
-          Semantics(
-              label: d.online ? 'Device online' : 'Device offline',
-              child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: d.online ? Colors.green : Colors.red)))
-        ]),
-        actions: [
-          IconButton(
-              tooltip: 'Refresh playback status',
-              onPressed: () => _run(() => state.refresh(), refresh: false),
-              icon: const Icon(Icons.refresh))
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          if (d.hasCapability('power') && !d.supportsLight)
-            Card(
-                child: SwitchListTile(
-                    title: const Text('Power'),
-                    value: d.genericState['enabled'] == true,
-                    onChanged: d.online
-                        ? (v) => _run(() => state.api
-                            .genericCommand(d.id, 'power', {'enabled': v}))
-                        : null)),
-          if (d.supportsLight)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      const Expanded(
-                          child: Text('Light',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w800))),
-                      Switch(
-                        value: lightOn,
-                        onChanged: d.online
-                            ? (v) async {
-                                setState(() => lightOn = v);
-                                await flushLight();
-                              }
-                            : null,
-                      ),
-                    ]),
-                    if (d.hasCapability('brightness')) ...[
-                      const SizedBox(height: 12),
-                      Text('Brightness: ${brightness.round()}%'),
-                      Slider(
-                        value: brightness,
-                        min: 0,
-                        max: 100,
-                        onChanged: d.online
-                            ? (v) {
-                                setState(() => brightness = v);
-                                queueLight();
-                              }
-                            : null,
-                        onChangeEnd: d.online ? (_) => flushLight() : null,
-                      ),
-                    ],
-                    if (d.hasCapability('rgb')) ...[
-                      const SizedBox(height: 12),
-                      const Text('Color'),
-                      const SizedBox(height: 10),
-                      ColorWheel(
-                        color: color,
-                        onChanged: d.online
-                            ? (value) {
-                                setState(() => color = value);
-                                queueLight();
-                              }
-                            : null,
-                        onChangeEnd: d.online ? flushLight : null,
-                      ),
-                      Center(
-                          child: TextButton(
-                        onPressed: d.online
-                            ? () {
-                                setState(() => color = Colors.white);
-                                flushLight();
-                              }
-                            : null,
-                        child: const Text('White'),
-                      )),
-                    ],
-                  ],
+    return Theme(
+        data: LilyTheme.light,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF3EFFB),
+          appBar: AppBar(
+            title: Row(children: [
+              Expanded(child: Text(d.displayName)),
+              const SizedBox(width: 12),
+              Semantics(
+                  label: d.online ? 'Device online' : 'Device offline',
+                  child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: d.online ? Colors.green : Colors.red)))
+            ]),
+            actions: [
+              IconButton(
+                  tooltip: 'Refresh playback status',
+                  onPressed: () => _run(() => state.refresh(), refresh: false),
+                  icon: const Icon(Icons.refresh))
+            ],
+          ),
+          body: PlaybackRefresher(
+              child: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              if (d.supportsAudio) ...[
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Music',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 8),
+                        Text(d.currentTrackTitle ??
+                            (d.audioLoaded
+                                ? 'Installed audio'
+                                : 'Choose something to play')),
+                        const SizedBox(height: 4),
+                        Text(
+                            !d.online
+                                ? 'Offline — reconnect Lily to play'
+                                : d.audioDownloading
+                                    ? 'Downloading MP3...'
+                                    : d.audioPlaying
+                                        ? (d.audioSource == 'stream'
+                                            ? 'Playing over Wi-Fi'
+                                            : 'Playing from Lily storage')
+                                        : 'Stopped',
+                            style: TextStyle(
+                                color: d.audioPlaying
+                                    ? Colors.green
+                                    : Colors.grey.shade600)),
+                        if (d.audioDownloading)
+                          const Padding(
+                              padding: EdgeInsets.only(top: 10),
+                              child: LinearProgressIndicator()),
+                        const SizedBox(height: 12),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          FilledButton.tonalIcon(
+                            onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        MusicScreen(deviceId: d.id))),
+                            icon: const Icon(Icons.library_music),
+                            label: const Text('Choose music'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: d.online &&
+                                    (d.audioLoaded || d.streamAvailable) &&
+                                    !d.audioDownloading
+                                ? () => _run(() => state.api.playAudio(d.id))
+                                : null,
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Play'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: d.online &&
+                                    (d.audioPlaying || d.audioDownloading)
+                                ? () => _run(() => state.api.stopAudio(d.id))
+                                : null,
+                            icon: const Icon(Icons.stop),
+                            label: const Text('Stop'),
+                          ),
+                        ]),
+                        if (d.audioError?.isNotEmpty == true)
+                          Text(d.audioError!,
+                              style: const TextStyle(color: Colors.red)),
+                        if (d.hasCapability('volume')) ...[
+                          const SizedBox(height: 14),
+                          Text('Volume: ${volume.round()}%'),
+                          Slider(
+                            value: volume,
+                            min: 0,
+                            max: 100,
+                            divisions: 20,
+                            onChanged: d.online
+                                ? (v) => setState(() => volume = v)
+                                : null,
+                            onChangeEnd: d.online
+                                ? (v) => _run(
+                                    () => state.api.setVolume(d.id, v.round()))
+                                : null,
+                          ),
+                        ],
+                        if (!kIsWeb)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                                'Choose music to browse server tracks or upload an MP3 from your phone.',
+                                style: TextStyle(color: Colors.grey.shade600)),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          if (d.supportsAudio) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Music',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    Text(d.currentTrackTitle ??
-                        (d.audioLoaded
-                            ? 'Installed audio'
-                            : 'No audio installed')),
-                    const SizedBox(height: 4),
-                    Text(
-                        d.audioDownloading
-                            ? 'Downloading MP3...'
-                            : d.audioPlaying
-                                ? 'Playing (${d.audioSource})'
-                                : 'Stopped',
-                        style: TextStyle(
-                            color: d.audioPlaying
-                                ? Colors.green
-                                : Colors.grey.shade600)),
-                    const SizedBox(height: 12),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      FilledButton.tonalIcon(
-                        onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => MusicScreen(deviceId: d.id))),
-                        icon: const Icon(Icons.library_music),
-                        label: const Text('Choose music'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: d.online &&
-                                (d.audioLoaded || d.streamAvailable) &&
-                                !d.audioDownloading
-                            ? () => _run(() => state.api.playAudio(d.id))
-                            : null,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Play'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: d.online
-                            ? () => _run(() => state.api.stopAudio(d.id))
-                            : null,
-                        icon: const Icon(Icons.stop),
-                        label: const Text('Stop'),
-                      ),
-                    ]),
-                    if (d.audioError?.isNotEmpty == true)
-                      Text(d.audioError!,
-                          style: const TextStyle(color: Colors.red)),
-                    if (d.hasCapability('volume')) ...[
-                      const SizedBox(height: 14),
-                      Text('Volume: ${volume.round()}%'),
-                      Slider(
-                        value: volume,
-                        min: 0,
-                        max: 100,
-                        divisions: 20,
-                        onChanged:
-                            d.online ? (v) => setState(() => volume = v) : null,
-                        onChangeEnd: d.online
-                            ? (v) =>
-                                _run(() => state.api.setVolume(d.id, v.round()))
-                            : null,
-                      ),
-                    ],
-                    if (!kIsWeb)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Text(
-                            'Choose music to browse server tracks or upload an MP3 from your phone.',
-                            style: TextStyle(color: Colors.grey.shade600)),
-                      ),
-                  ],
+              ],
+              if (d.hasCapability('power') && !d.supportsLight)
+                Card(
+                    child: SwitchListTile(
+                        title: const Text('Power'),
+                        value: d.genericState['enabled'] == true,
+                        onChanged: d.online
+                            ? (v) => _run(() => state.api
+                                .genericCommand(d.id, 'power', {'enabled': v}))
+                            : null)),
+              if (d.supportsLight)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Expanded(
+                              child: Text('Light',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800))),
+                          Switch(
+                            value: lightOn,
+                            onChanged: d.online
+                                ? (v) async {
+                                    setState(() => lightOn = v);
+                                    await flushLight();
+                                  }
+                                : null,
+                          ),
+                        ]),
+                        if (d.hasCapability('brightness')) ...[
+                          const SizedBox(height: 12),
+                          Text('Brightness: ${brightness.round()}%'),
+                          Slider(
+                            value: brightness,
+                            min: 0,
+                            max: 100,
+                            onChanged: d.online
+                                ? (v) {
+                                    setState(() => brightness = v);
+                                    queueLight();
+                                  }
+                                : null,
+                            onChangeEnd: d.online ? (_) => flushLight() : null,
+                          ),
+                        ],
+                        if (d.hasCapability('rgb')) ...[
+                          const SizedBox(height: 12),
+                          const Text('Color'),
+                          const SizedBox(height: 10),
+                          ColorWheel(
+                            color: color,
+                            onChanged: d.online
+                                ? (value) {
+                                    setState(() => color = value);
+                                    queueLight();
+                                  }
+                                : null,
+                            onChangeEnd: d.online ? flushLight : null,
+                          ),
+                          Center(
+                              child: TextButton(
+                            onPressed: d.online
+                                ? () {
+                                    setState(() => color = Colors.white);
+                                    flushLight();
+                                  }
+                                : null,
+                            child: const Text('White'),
+                          )),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          if (d.supportsLight || d.supportsAudio)
-            FilledButton.tonalIcon(
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => SchedulesScreen(device: d))),
-              icon: const Icon(Icons.schedule),
-              label: const Text('Schedules'),
-            ),
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          DeviceConfigurationScreen(deviceId: d.id))),
-              icon: const Icon(Icons.settings),
-              label: const Text('Configuration')),
-        ],
-      ),
-    );
+              const SizedBox(height: 12),
+              if (d.supportsLight || d.supportsAudio)
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => SchedulesScreen(device: d))),
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('Schedules'),
+                ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              DeviceConfigurationScreen(deviceId: d.id))),
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Configuration')),
+            ],
+          )),
+        ));
   }
 }

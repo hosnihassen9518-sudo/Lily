@@ -255,6 +255,15 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshDevices() async {
+    if (!authenticated) return;
+    final revision = _sessionRevision;
+    final loaded = await api.getDevices();
+    if (revision != _sessionRevision) return;
+    devices = loaded;
+    notifyListeners();
+  }
+
   Future<void> refresh() async {
     if (!authenticated) return;
     final revision = _sessionRevision;

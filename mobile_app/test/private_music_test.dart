@@ -153,6 +153,8 @@ void main() {
         })))));
     expect(find.text('Server catalog'), findsOneWidget);
     expect(find.text('My files'), findsOneWidget);
+    await tester.tap(find.text('My files'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Choose MP3 from phone'));
     await tester.pumpAndSettle();
     expect(picked, 1);

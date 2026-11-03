@@ -83,8 +83,6 @@ void main() {
         value: state,
         child: const MaterialApp(home: Scaffold(body: MusicScreen()))));
     await tester.tap(find.text('Play'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Auto: store or stream'));
     await tester.pump();
     await requested.future;
     await tester.pumpWidget(const SizedBox());

@@ -28,6 +28,20 @@ void main() {
     await tester.pumpAndSettle();
     final screen = tester.widget<MusicScreen>(find.byType(MusicScreen));
     expect(screen.deviceId, 7);
+    final scaffold = tester.widget<Scaffold>(find.descendant(
+        of: find.byType(MusicScreen), matching: find.byType(Scaffold)));
+    expect(scaffold.backgroundColor, const Color(0xFFF3EFFB));
+    final pickerContext = tester.element(find.text('Search audio'));
+    expect(Theme.of(pickerContext).brightness, Brightness.light);
+    expect(Theme.of(pickerContext).colorScheme.onSurface,
+        const Color(0xFF352C4A));
+    expect(find.text('My files'), findsOneWidget);
+    expect(find.text('Server catalog'), findsOneWidget);
+    await tester.tap(find.text('My files'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose MP3 from phone'), findsOneWidget);
+    await tester.tap(find.text('Server catalog'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
         find.text('No music in the server catalog yet.'), 200,
         scrollable: find

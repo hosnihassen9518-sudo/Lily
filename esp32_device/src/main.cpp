@@ -54,6 +54,11 @@ bool audioStateDirty = false;
 void publishState();
 void pollCatalog();
 void cancelCatalog();
+void startSpeakerTest();
+void finishSpeakerTest();
+bool speakerTestRequested = false, speakerTestActive = false;
+String beforeTestSource, beforeTestTitle;
+static const char* SPEAKER_TEST_PATH = "/speaker-test.wav";
 
 String homeSsid;
 String homePassword;
@@ -159,6 +164,49 @@ void cancelCatalog() {
 void catalogFailure(const char* detail) {
   cancelCatalog();
   audioError = detail;
+  publishState();
+}
+
+void finishSpeakerTest() {
+  speakerTestActive = false;
+  if (LittleFS.exists(SPEAKER_TEST_PATH)) LittleFS.remove(SPEAKER_TEST_PATH);
+  playbackSource = beforeTestSource;
+  audioTitle = beforeTestTitle;
+}
+
+void startSpeakerTest() {
+  speakerTestRequested = false;
+  cancelCatalog();
+  audio.stopSong();
+  if (speakerTestActive) finishSpeakerTest();
+  constexpr uint32_t rate = 16000, samples = 24000, dataBytes = samples * 2;
+  if (!canStageAudio(LittleFS.totalBytes() - LittleFS.usedBytes(), dataBytes + 44)) {
+    audioError = "Not enough temporary space for speaker test"; publishState(); return;
+  }
+  uint8_t header[44] = {};
+  memcpy(header, "RIFF", 4); memcpy(header + 8, "WAVEfmt ", 8); memcpy(header + 36, "data", 4);
+  auto put16 = [&](size_t at, uint16_t value) {header[at] = value; header[at + 1] = value >> 8;};
+  auto put32 = [&](size_t at, uint32_t value) {for (int i = 0; i < 4; ++i) header[at + i] = value >> (i * 8);};
+  put32(4, dataBytes + 36); put32(16, 16); put16(20, 1); put16(22, 1);
+  put32(24, rate); put32(28, rate * 2); put16(32, 2); put16(34, 16); put32(40, dataBytes);
+  File file = LittleFS.open(SPEAKER_TEST_PATH, "w");
+  bool ok = file && file.write(header, sizeof(header)) == sizeof(header);
+  int16_t buffer[256];
+  for (uint32_t offset = 0; ok && offset < samples; offset += 256) {
+    const size_t count = min(size_t(256), size_t(samples - offset));
+    for (size_t i = 0; i < count; ++i) {
+      const uint32_t sample = offset + i;
+      const float frequency = (sample / 8000) % 2 ? 880.0f : 440.0f;
+      buffer[i] = sample % 8000 < 6400 ? int16_t(2048.0f * sinf(TWO_PI * frequency * sample / rate)) : 0;
+    }
+    ok = file.write(reinterpret_cast<uint8_t*>(buffer), count * 2) == count * 2;
+  }
+  file.close();
+  if (!ok) {LittleFS.remove(SPEAKER_TEST_PATH); audioError = "Could not prepare speaker test"; publishState(); return;}
+  beforeTestSource = playbackSource; beforeTestTitle = audioTitle;
+  playbackSource = "test"; audioTitle = "Speaker test"; audioError = "";
+  speakerTestActive = audio.connecttoFS(LittleFS, SPEAKER_TEST_PATH);
+  if (!speakerTestActive) {finishSpeakerTest(); audioError = "Speaker test could not start";}
   publishState();
 }
 
@@ -283,6 +331,13 @@ void publishState() {
   audioState["downloading"] = catalogDownloading || !catalogPending.isEmpty();
   audioState["stream_available"] = !streamUrl.isEmpty();
   audioState["free_bytes"] = LittleFS.totalBytes() - LittleFS.usedBytes();
+  audioState["sample_rate"] = audio.getSampleRate();
+  audioState["bits_per_sample"] = audio.getBitsPerSample();
+  audioState["channels"] = audio.getChannels();
+  audioState["position_seconds"] = audio.getAudioCurrentTime();
+  const uint16_t audioLevel = audio.getVUlevel();
+  audioState["level_left"] = audioLevel >> 8;
+  audioState["level_right"] = audioLevel & 255;
 
   String payload;
   serializeJson(doc, payload);
@@ -311,6 +366,9 @@ void handleCommand(const JsonDocument& doc) {
   if(deviceRuntimeReady() && String(doc["type"] | "")=="status_request"){publishState();publishHeartbeat();return;}
   if(!deviceRuntimeReady())return;
   String type = doc["type"] | "";
+  if (speakerTestActive && (type == "audio_catalog" || type == "audio_play" || type == "audio_stop")) {
+    audio.stopSong(); finishSpeakerTest();
+  }
 
   if (type == "light") {
     JsonObjectConst payload = doc["payload"];
@@ -320,6 +378,8 @@ void handleCommand(const JsonDocument& doc) {
     lightG = payload["g"] | lightG;
     lightB = payload["b"] | lightB;
     applyLight();
+  } else if (type == "audio_test") {
+    speakerTestRequested = true;
   } else if (type == "audio_catalog") {
     cancelCatalog();
     serializeJson(doc["payload"], catalogPending);
@@ -611,6 +671,9 @@ void applyScheduleAction(JsonObjectConst action) {
 
   if (action["audio"].is<const char*>()) {
     String audioAction = action["audio"].as<String>();
+    if (speakerTestActive && (audioAction == "play" || audioAction == "stop")) {
+      audio.stopSong(); finishSpeakerTest();
+    }
 
     if (audioAction == "play" && LittleFS.exists(AUDIO_CURRENT_PATH)) {
       cancelCatalog(); streamUrl = ""; playbackSource = "local"; audioTitle = ""; audioError = "";
@@ -748,8 +811,11 @@ void setup() {
   }
   // Discard only an interrupted transfer, never saved configuration or the current track.
   if (LittleFS.exists(AUDIO_UPLOAD_PATH)) LittleFS.remove(AUDIO_UPLOAD_PATH);
+  if (LittleFS.exists(SPEAKER_TEST_PATH)) LittleFS.remove(SPEAKER_TEST_PATH);
 
-  audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  const bool audioPinsReady = audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  Serial.printf("Audio I2S: BCLK=%d LRC=%d DIN=%d configured=%s\n",
+                I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN, audioPinsReady ? "yes" : "no");
   Serial.printf("Lily boot: serial=%s firmware=%s flash=%u psram=%u filesystem=%u free=%u\n",
                 DEVICE_SERIAL, FIRMWARE_VERSION, ESP.getFlashChipSize(), ESP.getPsramSize(),
                 unsigned(LittleFS.totalBytes()), unsigned(LittleFS.totalBytes() - LittleFS.usedBytes()));
@@ -757,9 +823,11 @@ void setup() {
   audio.setVolume(map(audioVolume, 0, 100, 0, 21));
 
   beginDeviceLifecycle([](){
+    speakerTestRequested=false; speakerTestActive=false;
+    beforeTestSource=""; beforeTestTitle=""; playbackSource="local";
     cancelCatalog(); streamUrl=""; audioTitle=""; audioError="";
     audio.stopSong();lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
-    const char* files[]={CONFIG_PATH,"/config.tmp",SCHEDULES_PATH,AUDIO_CURRENT_PATH,AUDIO_UPLOAD_PATH};
+    const char* files[]={CONFIG_PATH,"/config.tmp",SCHEDULES_PATH,AUDIO_CURRENT_PATH,AUDIO_UPLOAD_PATH,SPEAKER_TEST_PATH};
     for(auto path:files)if(LittleFS.exists(path) && !LittleFS.remove(path))return false;
     return true;
   });
@@ -779,11 +847,21 @@ void loop() {
   pollBleProvisioning();
   if(allowsUserFileMutation(deviceResetPending()))webServer.handleClient();
   audio.loop();
+  if (speakerTestRequested && deviceRuntimeReady()) startSpeakerTest();
+  if (speakerTestActive && !audio.isRunning()) {finishSpeakerTest(); publishState();}
   pollCatalog();
   if (audioStateDirty) { audioStateDirty = false; publishState(); }
   static bool wasPlaying = false;
   const bool playing = audio.isRunning();
   if (playing != wasPlaying) { wasPlaying = playing; publishState(); }
+  static unsigned long lastAudioDiagnostic = 0;
+  if (playing && millis() - lastAudioDiagnostic >= 5000) {
+    lastAudioDiagnostic = millis();
+    const uint16_t audioLevel = audio.getVUlevel();
+    Serial.printf("Audio progress: rate=%u bits=%u channels=%u time=%us running=%u level=%u,%u\n",
+                  audio.getSampleRate(), audio.getBitsPerSample(), audio.getChannels(),
+                  audio.getAudioCurrentTime(), unsigned(playing), audioLevel >> 8, audioLevel & 255);
+  }
 
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqtt.connected() && millis() - lastReconnectAttempt > 5000) {
@@ -808,6 +886,9 @@ void loop() {
 // Decoder errors can arrive after connecttohost() has accepted the URL.
 void audio_info(const char* info) {
   String message(info); message.toLowerCase();
+  if (message.indexOf("http") < 0 && message.indexOf("token") < 0 && message.indexOf("authorization") < 0) {
+    Serial.printf("Audio: %s\n", info);
+  }
   if (message.indexOf("failed") >= 0 || message.indexOf("error") >= 0
       || message.indexOf("http/1.1 4") >= 0 || message.indexOf("http/1.1 5") >= 0) {
     audioError = "Audio playback failed. Check Wi-Fi and select the catalog track again.";
