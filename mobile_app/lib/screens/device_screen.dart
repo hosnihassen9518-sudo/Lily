@@ -114,6 +114,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
                       shape: BoxShape.circle,
                       color: d.online ? Colors.green : Colors.red)))
         ]),
+        actions: [
+          IconButton(
+              tooltip: 'Refresh playback status',
+              onPressed: () => _run(() => state.refresh(), refresh: false),
+              icon: const Icon(Icons.refresh))
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
@@ -211,7 +217,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
                             ? 'Installed audio'
                             : 'No audio installed')),
                     const SizedBox(height: 4),
-                    Text(d.audioPlaying ? 'Playing now' : 'Stopped',
+                    Text(
+                        d.audioDownloading
+                            ? 'Downloading MP3...'
+                            : d.audioPlaying
+                                ? 'Playing (${d.audioSource})'
+                                : 'Stopped',
                         style: TextStyle(
                             color: d.audioPlaying
                                 ? Colors.green
@@ -219,7 +230,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
                     const SizedBox(height: 12),
                     Wrap(spacing: 8, runSpacing: 8, children: [
                       FilledButton.icon(
-                        onPressed: d.online && d.audioLoaded
+                        onPressed: d.online &&
+                                (d.audioLoaded || d.streamAvailable) &&
+                                !d.audioDownloading
                             ? () => _run(() => state.api.playAudio(d.id))
                             : null,
                         icon: const Icon(Icons.play_arrow),
@@ -233,6 +246,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         label: const Text('Stop'),
                       ),
                     ]),
+                    if (d.audioError?.isNotEmpty == true)
+                      Text(d.audioError!,
+                          style: const TextStyle(color: Colors.red)),
                     if (d.hasCapability('volume')) ...[
                       const SizedBox(height: 14),
                       Text('Volume: ${volume.round()}%'),

@@ -1,6 +1,6 @@
 #include "ble_provisioning.h"
 #include "device_lifecycle.h"
-#include "device_config.h"
+#include "lily_factory_config.h"
 #include <ArduinoJson.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>

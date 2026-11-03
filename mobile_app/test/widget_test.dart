@@ -58,7 +58,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
-      'Leaving music while a download completes does not update a disposed screen',
+      'Leaving music while a catalog request completes does not update a disposed screen',
       (tester) async {
     final download = Completer<http.Response>();
     final requested = Completer<void>();
@@ -70,6 +70,7 @@ void main() {
       Device.fromJson({
         'id': 1,
         'serial_number': 'test',
+        'online': true,
         'smart_home': {
           'capabilities': ['audio']
         }
@@ -81,10 +82,13 @@ void main() {
     await tester.pumpWidget(ChangeNotifierProvider.value(
         value: state,
         child: const MaterialApp(home: Scaffold(body: MusicScreen()))));
-    await tester.tap(find.text('Install'));
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Auto: store or stream'));
+    await tester.pump();
     await requested.future;
     await tester.pumpWidget(const SizedBox());
-    download.complete(http.Response('music', 200));
+    download.complete(http.Response('{"mqtt_published":true}', 200));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

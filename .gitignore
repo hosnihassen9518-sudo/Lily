@@ -74,6 +74,7 @@ credentials.h
 secrets.h
 private_config.h
 esp32_device/include/device_config.h
+esp32_device/include/device_config*.local.h
 esp32_test_light/include/device_config.h
 
 # IDE / OS

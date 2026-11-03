@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/music_track.dart';
-import '../services/provision_service.dart';
 import '../state/app_state.dart';
 
 class MusicScreen extends StatefulWidget {
@@ -15,16 +14,17 @@ class _MusicScreenState extends State<MusicScreen> {
   bool busy = false;
   String? status;
 
-  Future<void> installTrack(MusicTrack track) async {
+  Future<void> installTrack(MusicTrack track, {String mode = 'auto'}) async {
     final state = context.read<AppState>();
     final backendUrl = state.api.baseUrl;
     bool isCurrentSession() => mounted && state.api.baseUrl == backendUrl;
 
-    final audioDevices = state.devices.where((d) => d.supportsAudio).toList();
+    final audioDevices =
+        state.devices.where((d) => d.supportsAudio && d.online).toList();
     if (audioDevices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Add an audio-capable Lily device first.')),
+            content: Text('Connect an audio-capable Lily device first.')),
       );
       return;
     }
@@ -39,7 +39,7 @@ class _MusicScreenState extends State<MusicScreen> {
             builder: (context, setLocalState) => AlertDialog(
               title: const Text('Choose device'),
               content: DropdownButtonFormField<int>(
-                value: value,
+                initialValue: value,
                 items: audioDevices
                     .map((d) => DropdownMenuItem(
                         value: d.id, child: Text(d.displayName)))
@@ -66,56 +66,16 @@ class _MusicScreenState extends State<MusicScreen> {
 
     setState(() {
       busy = true;
-      status = 'Downloading ${track.title}...';
+      status = 'Requesting ${track.title}...';
     });
 
     try {
-      final bytes = await state.api.downloadMusic(track.id);
-      if (!isCurrentSession()) return;
-
-      setState(() {
-        status =
-            'Downloaded. Connect your phone to the Lily device setup Wi-Fi, then continue.';
-      });
-
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Transfer to Lily'),
-          content: const Text(
-            'For V0.4 the MP3 is transferred directly over the device local Wi-Fi. '
-            'Connect to the Lily setup network and press Transfer.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Transfer'),
-            ),
-          ],
-        ),
-      );
-
-      if (!isCurrentSession() || proceed != true) return;
-
-      setState(() => status = 'Uploading to device...');
-      await ProvisionService().uploadMp3(
-        bytes: bytes,
-        checksum: track.checksum,
-      );
-      if (!isCurrentSession()) return;
-
-      await state.api.setDeviceState(targetDevice.id, {
-        'current_track_title': track.title,
-      });
+      await state.api.selectCatalogAudio(targetDevice.id, track.id, mode: mode);
       if (!isCurrentSession()) return;
       await state.refresh();
       if (!isCurrentSession()) return;
-      setState(() =>
-          status = '${track.title} installed on ${targetDevice.displayName}.');
+      setState(() => status =
+          'Playback requested on ${targetDevice.displayName}. Check the device for download or playback status.');
     } catch (e) {
       if (isCurrentSession()) setState(() => status = e.toString());
     } finally {
@@ -141,7 +101,7 @@ class _MusicScreenState extends State<MusicScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Choose one sound to store on your Lily device.',
+            'Play over Wi-Fi. Auto stores one MP3 when space allows, otherwise streams.',
             style: TextStyle(color: Colors.grey.shade600),
           ),
           if (!hasAudioDevice)
@@ -173,11 +133,18 @@ class _MusicScreenState extends State<MusicScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: FilledButton.tonal(
-                  onPressed: busy || !hasAudioDevice
-                      ? null
-                      : () => installTrack(track),
-                  child: const Text('Install'),
+                trailing: PopupMenuButton<String>(
+                  enabled: !busy && hasAudioDevice,
+                  tooltip: 'Choose playback mode',
+                  onSelected: (mode) => installTrack(track, mode: mode),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'auto', child: Text('Auto: store or stream')),
+                    PopupMenuItem(
+                        value: 'stream', child: Text('Stream over Wi-Fi')),
+                  ],
+                  child: const Padding(
+                      padding: EdgeInsets.all(12), child: Text('Play')),
                 ),
               ),
             ),

@@ -29,6 +29,7 @@ POLICIES = {
         "activate_device": "device",
         "set_light": "devices.control",
         "audio_play": "devices.control",
+        "audio_catalog": "devices.control",
         "audio_stop": "devices.control",
         "set_volume": "devices.control",
         "admin_create_device": "inventory.create",
@@ -50,6 +51,7 @@ POLICIES = {
     "music": {
         "list_music": "music.read",
         "download_music": "music.export",
+        "device_media": "device",
         "upload_music": "music.create",
         "admin_list_music": "music.read",
         "admin_set_music_enabled": "music.change",

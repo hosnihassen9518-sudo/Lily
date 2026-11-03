@@ -9,18 +9,51 @@
 #include <Audio.h>
 #include <mbedtls/sha256.h>
 
-#include "device_config.h"
+#include "lily_factory_config.h"
 #include "device_lifecycle.h"
 #include "device_message_rules.h"
 #include "wifi_transaction.h"
 #include "ble_provisioning.h"
 #include "storage_paths.h"
+#include "audio_storage_policy.h"
 
 WebServer webServer(80);
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
-Adafruit_NeoPixel pixel(1, RGB_PIN, NEO_GRB + NEO_KHZ800);
+#ifdef LILY_V2
+#undef RGB_PIN
+#undef I2S_BCLK_PIN
+#undef I2S_LRC_PIN
+#undef I2S_DOUT_PIN
+#undef FIRMWARE_VERSION
+#define RGB_PIN 18
+#define I2S_BCLK_PIN 10
+#define I2S_LRC_PIN 40
+#define I2S_DOUT_PIN 15
+#define FIRMWARE_VERSION "2.0.0"
+#endif
+#ifndef LED_COUNT
+#ifdef LILY_V2
+#define LED_COUNT 5
+#else
+#define LED_COUNT 1
+#endif
+#endif
+Adafruit_NeoPixel pixel(LED_COUNT, RGB_PIN, NEO_GRB + NEO_KHZ800);
 Audio audio;
+String catalogPending, streamUrl, audioTitle, audioError;
+String playbackSource = "local";
+HTTPClient catalogHttp;
+WiFiClient catalogClient;
+File catalogFile;
+size_t catalogExpected = 0, catalogReceived = 0;
+String catalogHash, catalogTitle;
+bool catalogDownloading = false;
+unsigned long catalogLastData = 0;
+bool audioStateDirty = false;
+void publishState();
+void pollCatalog();
+void cancelCatalog();
 
 String homeSsid;
 String homePassword;
@@ -48,8 +81,9 @@ void applyLight() {
     return;
   }
 
-  pixel.setBrightness(map(lightBrightness, 0, 100, 0, 255));
-  pixel.setPixelColor(0, pixel.Color(lightR, lightG, lightB));
+  pixel.setBrightness(255);
+  pixel.fill(pixel.Color(lightR * lightBrightness / 100, lightG * lightBrightness / 100,
+                        lightB * lightBrightness / 100));
   pixel.show();
 }
 
@@ -114,6 +148,90 @@ String sha256File(const char* path) {
   return String(output);
 }
 
+void cancelCatalog() {
+  catalogPending = "";
+  catalogFile.close();
+  catalogHttp.end();
+  if (catalogDownloading) LittleFS.remove(AUDIO_UPLOAD_PATH);
+  catalogDownloading = false;
+}
+
+void catalogFailure(const char* detail) {
+  cancelCatalog();
+  audioError = detail;
+  publishState();
+}
+
+void pollCatalog() {
+  if (!deviceRuntimeReady()) { cancelCatalog(); return; }
+  if (!catalogPending.isEmpty()) {
+    JsonDocument request;
+    const auto error = deserializeJson(request, catalogPending);
+    catalogPending = "";
+    String path = request["path"] | "";
+    String mode = request["mode"] | "auto";
+    catalogExpected = request["size"] | size_t(0);
+    catalogHash = request["sha256"] | "";
+    catalogTitle = request["title"] | "";
+    if (error || !path.startsWith("/api/v1/music/") || path.indexOf("/device.mp3?token=") < 0
+        || path.indexOf('\r') >= 0 || path.indexOf('\n') >= 0
+        || catalogExpected == 0 || catalogHash.length() != 64
+        || (mode != "auto" && mode != "stream")) {
+      catalogFailure("Invalid catalog request"); return;
+    }
+    audio.stopSong();
+    String url = "http://" + String(BACKEND_HOST) + ":" + String(BACKEND_PORT) + path;
+    size_t freeBytes = LittleFS.totalBytes() - LittleFS.usedBytes();
+    audioError = "";
+    if (mode == "stream" || !canStageAudio(freeBytes, catalogExpected)) {
+      streamUrl = url; playbackSource = "stream"; audioTitle = catalogTitle;
+      if (!audio.connecttohost(streamUrl.c_str())) audioError = "Wi-Fi stream could not start. Select the track again to retry.";
+      publishState(); return;
+    }
+    catalogHttp.setConnectTimeout(5000);
+    catalogHttp.setTimeout(5000);
+    if (!catalogHttp.begin(catalogClient, url) || catalogHttp.GET() != HTTP_CODE_OK
+        || catalogHttp.getSize() != int(catalogExpected)) {
+      catalogFailure("Catalog download unavailable or size changed"); return;
+    }
+    catalogFile = LittleFS.open(AUDIO_UPLOAD_PATH, "w");
+    if (!catalogFile) { catalogFailure("Could not create temporary MP3"); return; }
+    catalogDownloading = true;
+    catalogReceived = 0;
+    catalogLastData = millis();
+    publishState();
+  }
+  if (!catalogDownloading) return;
+  WiFiClient* input = catalogHttp.getStreamPtr();
+  uint8_t buffer[2048];
+  const size_t count = min(size_t(input->available()), min(sizeof(buffer), catalogExpected - catalogReceived));
+  if (count) {
+    int received = input->read(buffer, count);
+    if (received <= 0 || catalogFile.write(buffer, received) != size_t(received)) {
+      catalogFailure("MP3 write failed; previous track kept"); return;
+    }
+    catalogReceived += received;
+    catalogLastData = millis();
+  }
+  if (catalogReceived == catalogExpected) {
+    catalogFile.flush(); catalogFile.close(); catalogHttp.end();
+    if (!sha256File(AUDIO_UPLOAD_PATH).equalsIgnoreCase(catalogHash)) {
+      catalogFailure("MP3 checksum mismatch; previous track kept"); return;
+    }
+    // LittleFS rename replaces the destination atomically; never delete the old track first.
+    if (!LittleFS.rename(AUDIO_UPLOAD_PATH, AUDIO_CURRENT_PATH)) {
+      catalogFailure("MP3 replacement failed; previous track kept"); return;
+    }
+    catalogDownloading = false;
+    streamUrl = ""; playbackSource = "local"; audioTitle = catalogTitle;
+    if (!audio.connecttoFS(LittleFS, AUDIO_CURRENT_PATH)) audioError = "MP3 stored but playback could not start";
+    publishState();
+  } else if (WiFi.status() != WL_CONNECTED || millis() - catalogLastData > 15000
+             || (!catalogHttp.connected() && !input->available())) {
+    catalogFailure("MP3 download interrupted; previous track kept");
+  }
+}
+
 bool activateWithBackend() {
   if (pairingToken.length() == 0) return false;
 
@@ -159,6 +277,12 @@ void publishState() {
   audioState["loaded"] = LittleFS.exists(AUDIO_CURRENT_PATH);
   audioState["playing"] = audio.isRunning();
   audioState["volume"] = audioVolume;
+  audioState["source"] = playbackSource;
+  audioState["title"] = audioTitle;
+  audioState["error"] = audioError;
+  audioState["downloading"] = catalogDownloading || !catalogPending.isEmpty();
+  audioState["stream_available"] = !streamUrl.isEmpty();
+  audioState["free_bytes"] = LittleFS.totalBytes() - LittleFS.usedBytes();
 
   String payload;
   serializeJson(doc, payload);
@@ -196,14 +320,20 @@ void handleCommand(const JsonDocument& doc) {
     lightG = payload["g"] | lightG;
     lightB = payload["b"] | lightB;
     applyLight();
+  } else if (type == "audio_catalog") {
+    cancelCatalog();
+    serializeJson(doc["payload"], catalogPending);
+    audioError = "";
   } else if (type == "audio_play") {
-    if (LittleFS.exists(AUDIO_CURRENT_PATH)) {
-      audio.connecttoFS(LittleFS, AUDIO_CURRENT_PATH);
-    }
+    audioError = "";
+    bool ok = !streamUrl.isEmpty() ? audio.connecttohost(streamUrl.c_str())
+                                 : audio.connecttoFS(LittleFS, AUDIO_CURRENT_PATH);
+    if (!ok) audioError = "Playback could not start. Select the catalog track again to refresh streaming access.";
   } else if (type == "audio_stop") {
+    cancelCatalog();
     audio.stopSong();
   } else if (type == "volume") {
-    audioVolume = doc["payload"]["volume"] | audioVolume;
+    audioVolume = constrain(doc["payload"]["volume"] | int(audioVolume), 0, 100);
     // ESP32-audioI2S uses 0..21 internally.
     audio.setVolume(map(audioVolume, 0, 100, 0, 21));
   }
@@ -288,7 +418,12 @@ void beginProvisioningAccessPoint() {
   webServer.on("/info", HTTP_GET, []() {
     JsonDocument doc;
     doc["serial"] = DEVICE_SERIAL;
-    doc["model"] = "LILY-V1";
+    doc["model"] =
+#ifdef LILY_V2
+      "Lily V2";
+#else
+      "LILY-V1";
+#endif
     doc["device_type_key"] = DEVICE_TYPE_KEY;
     doc["device_type_name"] = DEVICE_TYPE_NAME;
     JsonArray capabilities = doc["capabilities"].to<JsonArray>();
@@ -363,6 +498,7 @@ void beginProvisioningAccessPoint() {
         "{\"ok\":true,\"detail\":\"Device connected and registered successfully.\"}");
   });
 
+#ifndef LILY_V2
   webServer.on(
       "/audio",
       HTTP_POST,
@@ -387,10 +523,6 @@ void beginProvisioningAccessPoint() {
         }
 
         audio.stopSong();
-
-        if (LittleFS.exists(AUDIO_CURRENT_PATH)) {
-          LittleFS.remove(AUDIO_CURRENT_PATH);
-        }
 
         if (!LittleFS.rename(AUDIO_UPLOAD_PATH, AUDIO_CURRENT_PATH)) {
           webServer.send(
@@ -423,6 +555,7 @@ void beginProvisioningAccessPoint() {
           LittleFS.remove(AUDIO_UPLOAD_PATH);
         }
       });
+#endif
 
   webServer.on("/health", HTTP_GET, []() {
     webServer.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -480,8 +613,10 @@ void applyScheduleAction(JsonObjectConst action) {
     String audioAction = action["audio"].as<String>();
 
     if (audioAction == "play" && LittleFS.exists(AUDIO_CURRENT_PATH)) {
-      audio.connecttoFS(LittleFS, AUDIO_CURRENT_PATH);
+      cancelCatalog(); streamUrl = ""; playbackSource = "local"; audioTitle = ""; audioError = "";
+      if (!audio.connecttoFS(LittleFS, AUDIO_CURRENT_PATH)) audioError = "Scheduled local playback could not start";
     } else if (audioAction == "stop") {
+      cancelCatalog();
       audio.stopSong();
     }
   }
@@ -607,15 +742,22 @@ void setup() {
   pixel.clear();
   pixel.show();
 
-  if (!LittleFS.begin(true)) {
+  if (!LittleFS.begin(false)) {
     Serial.println("LittleFS mount failed; setup stopped to preserve reset state.");
     while(true)delay(1000);
   }
+  // Discard only an interrupted transfer, never saved configuration or the current track.
+  if (LittleFS.exists(AUDIO_UPLOAD_PATH)) LittleFS.remove(AUDIO_UPLOAD_PATH);
 
   audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  Serial.printf("Lily boot: serial=%s firmware=%s flash=%u psram=%u filesystem=%u free=%u\n",
+                DEVICE_SERIAL, FIRMWARE_VERSION, ESP.getFlashChipSize(), ESP.getPsramSize(),
+                unsigned(LittleFS.totalBytes()), unsigned(LittleFS.totalBytes() - LittleFS.usedBytes()));
+  audio.setConnectionTimeout(5000, 5000);
   audio.setVolume(map(audioVolume, 0, 100, 0, 21));
 
   beginDeviceLifecycle([](){
+    cancelCatalog(); streamUrl=""; audioTitle=""; audioError="";
     audio.stopSong();lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
     const char* files[]={CONFIG_PATH,"/config.tmp",SCHEDULES_PATH,AUDIO_CURRENT_PATH,AUDIO_UPLOAD_PATH};
     for(auto path:files)if(LittleFS.exists(path) && !LittleFS.remove(path))return false;
@@ -637,6 +779,11 @@ void loop() {
   pollBleProvisioning();
   if(allowsUserFileMutation(deviceResetPending()))webServer.handleClient();
   audio.loop();
+  pollCatalog();
+  if (audioStateDirty) { audioStateDirty = false; publishState(); }
+  static bool wasPlaying = false;
+  const bool playing = audio.isRunning();
+  if (playing != wasPlaying) { wasPlaying = playing; publishState(); }
 
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqtt.connected() && millis() - lastReconnectAttempt > 5000) {
@@ -655,5 +802,15 @@ void loop() {
       lastScheduleCheck = millis();
       if(deviceRuntimeReady())executeSchedulesIfDue();
     }
+  }
+}
+
+// Decoder errors can arrive after connecttohost() has accepted the URL.
+void audio_info(const char* info) {
+  String message(info); message.toLowerCase();
+  if (message.indexOf("failed") >= 0 || message.indexOf("error") >= 0
+      || message.indexOf("http/1.1 4") >= 0 || message.indexOf("http/1.1 5") >= 0) {
+    audioError = "Audio playback failed. Check Wi-Fi and select the catalog track again.";
+    audioStateDirty = true;
   }
 }

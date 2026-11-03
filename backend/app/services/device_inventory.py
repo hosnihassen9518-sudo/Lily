@@ -53,8 +53,12 @@ def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
     pins = {'LED_PIN': 18} if dtype.key == 'test_light' else {'RGB_PIN': 4, 'I2S_BCLK_PIN': 12, 'I2S_LRC_PIN': 13, 'I2S_DOUT_PIN': 14, 'MIC_BCLK_PIN': 15, 'MIC_WS_PIN': 16, 'MIC_DATA_PIN': 17}
     if model_key == "lily_led_strip":
         pins.update(LED_COUNT=5, LILY_LED_STRIP=1)
+    if model_key == 'lily_v2':
+        pins = dict(RGB_PIN=18, LED_COUNT=5, I2S_BCLK_PIN=10, I2S_LRC_PIN=40, I2S_DOUT_PIN=15)
+        pins['LILY_V2_CONFIG'] = 1
+        values['FIRMWARE_VERSION'] = '2.0.0'
     values.update(pins)
-    header = '#pragma once\n\n' + '\n'.join('#define ' + key + ' ' + (str(value) if isinstance(value, int) else c_string(value)) for key, value in values.items()) + '\n'
+    header = '#pragma once\n\n' + ('// Build: pio run -d esp32_device -e lily_v2\n' if model_key == 'lily_v2' else '') + '\n'.join('#define ' + key + ' ' + (str(value) if isinstance(value, int) else c_string(value)) for key, value in values.items()) + '\n'
     from app.services.provisioning_archive import archive_config
     archive_config(db,device.id,{'serial_number':serial,'device_secret':secret,'filename':serial+'-device_config.h','config_header':header})
     db.commit()
@@ -65,6 +69,7 @@ def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
 def seed_models(db):
     for key, name, type_key, target in (
         ('lily_v1', 'LILY-V1', 'lily_audio_light', 'esp32_device'),
+        ('lily_v2', 'Lily V2', 'lily_audio_light', 'esp32_device'),
         ('lily_test_light', 'Lily Test Light', 'test_light', 'esp32_test_light'),
         ('lily_led_strip', 'Lily LED Strip', 'test_light', 'esp32_test_light'),
     ):
@@ -74,7 +79,7 @@ def seed_models(db):
             db.add(dtype); db.flush()
         if db.get(DeviceModel, key) is None:
             db.add(DeviceModel(key=key, name=name, device_type_id=dtype.id, firmware_target=target,
-                               capabilities=["power", "light", "brightness", "rgb"] if key == "lily_led_strip" else None))
+                               capabilities=["power", "light", "brightness", "rgb", "audio", "volume"] if key == 'lily_v2' else ["power", "light", "brightness", "rgb"] if key == "lily_led_strip" else None))
     if db.get(AppSetting, 'mobile_session_months') is None:
         db.add(AppSetting(key='mobile_session_months', value_json={'months': 3}))
     db.flush()

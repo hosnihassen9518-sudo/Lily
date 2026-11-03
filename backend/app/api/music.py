@@ -24,6 +24,33 @@ from app.schemas.admin import EnabledUpdate
 
 router = APIRouter(prefix="/music", tags=["music"])
 
+
+@router.get('/{music_id}/device.mp3')
+def device_media(music_id: int, token: str, db: Session = Depends(get_db)):
+    from app.core.security import decode_token
+    from app.models.device import Device
+    from app.api.device_operations import device_generation
+    from app.services.device_features import require_features
+    try:
+        claims = decode_token(token)
+        if claims.get('type') != 'device_media' or claims.get('music_id') != music_id:
+            raise ValueError()
+        device = db.get(Device, int(claims['sub']))
+        if (not device or device.lifecycle_status != 'ACTIVE' or device.owner_id is None
+                or device.owner_id != claims.get('owner')
+                or device_generation(db, device) != claims.get('generation')):
+            raise ValueError()
+    except Exception:
+        raise HTTPException(403, 'Invalid or expired device media authorization')
+    require_features(db, device, 'audio')
+    track = db.get(Music, music_id)
+    if not track or not track.enabled:
+        raise HTTPException(404, 'Music not found')
+    if not Path(track.storage_path).is_file():
+        raise HTTPException(410, 'Music file missing from storage')
+    return FileResponse(track.storage_path, media_type='audio/mpeg',
+                        headers={'Cache-Control': 'private, no-store'})
+
 @router.get("")
 def list_music(
     user: User = Depends(get_current_user),

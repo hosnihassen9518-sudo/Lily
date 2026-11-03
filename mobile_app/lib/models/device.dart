@@ -101,8 +101,18 @@ class Device {
   bool hasCapability(String capability) => capabilities.contains(capability);
   bool get supportsLight => hasCapability('light');
   bool get supportsAudio => hasCapability('audio');
-  String? get currentTrackTitle =>
-      genericState['current_track_title']?.toString();
+  String? get currentTrackTitle {
+    final title = (genericState['audio'] is Map
+        ? genericState['audio']['title']?.toString()
+        : null) ?? genericState['current_track_title']?.toString();
+    return title?.trim().isNotEmpty == true ? title : null;
+  }
+  Map get audioState =>
+      genericState['audio'] is Map ? genericState['audio'] as Map : const {};
+  bool get streamAvailable => audioState['stream_available'] == true;
+  bool get audioDownloading => audioState['downloading'] == true;
+  String get audioSource => audioState['source']?.toString() ?? 'local';
+  String? get audioError => audioState['error']?.toString();
   Map<String, dynamic> toJson() => {
         'id': id,
         'generation': generation,

@@ -6,6 +6,8 @@ from app.services.access_sessions import (
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -429,6 +431,43 @@ def set_light(
     }
 
 
+class CatalogAudioCommand(BaseModel):
+    music_id: int
+    mode: Literal['auto', 'stream'] = 'auto'
+
+
+@router.post('/{device_id}/audio/catalog')
+def audio_catalog(device_id: int, payload: CatalogAudioCommand,
+                  user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.music import Music
+    from app.api.device_operations import require_mutable, device_generation
+    from app.services.audio_catalog import media_token
+    from pathlib import Path
+    device = locked_device(db, device_id=device_id)
+    if not device or not can_access_device(db, user, device):
+        raise HTTPException(404, 'Device not found')
+    require_mutable(device)
+    require_features(db, device, 'audio')
+    if not (device.firmware_version or '').startswith('2.'):
+        raise HTTPException(409, 'Upgrade Lily firmware to v2 before using catalog Wi-Fi playback')
+    if 'music.export' not in user._access.permissions:
+        raise HTTPException(403, 'Permission required: music.export')
+    track = db.get(Music, payload.music_id)
+    if not track or not track.enabled:
+        raise HTTPException(404, 'Music not found')
+    if not Path(track.storage_path).is_file():
+        raise HTTPException(410, 'Music file missing from storage')
+    generation = device_generation(db, device)
+    token = media_token(device, generation, track.id)
+    command = {'type': 'audio_catalog', 'payload': {
+        'path': f'/api/v1/music/{track.id}/device.mp3?token={token}',
+        'size': track.filesize, 'sha256': track.checksum_sha256,
+        'title': track.title, 'mode': payload.mode,
+    }}
+    delivered = mqtt_service.publish_command(device.serial_number, command, generation=generation)
+    return {'ok': True, 'mqtt_published': delivered}
+
+
 @router.post("/{device_id}/audio/play")
 def audio_play(
     device_id: int,
@@ -646,7 +685,8 @@ def admin_change_device_model(device_id: int, payload: DeviceModelChange,
     if not target:
         raise HTTPException(422, "Unknown device model")
     previous = associated_model(db, device)
-    if not previous or target.firmware_target != previous.firmware_target or target.hardware_version != device.hardware_version:
+    strip_audio_upgrade = previous and previous.key == 'lily_led_strip' and target.key == 'lily_v2'
+    if not previous or (target.firmware_target != previous.firmware_target and not strip_audio_upgrade) or target.hardware_version != device.hardware_version:
         raise HTTPException(409, "Model must use compatible firmware and hardware")
     profile = db.get(DeviceProfile, device.id)
     if not profile:

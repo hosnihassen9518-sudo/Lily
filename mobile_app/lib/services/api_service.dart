@@ -430,6 +430,13 @@ class ApiService {
         .toList();
   }
 
+  Future<void> selectCatalogAudio(int deviceId, int musicId,
+      {String mode = 'auto'}) async {
+    final result = await _jsonRequest('/devices/$deviceId/audio/catalog',
+        method: 'POST', body: {'music_id': musicId, 'mode': mode});
+    _checkCommandPublished(result);
+  }
+
   Future<Uint8List> downloadMusic(int musicId) async {
     final response = await _send('GET', '/music/$musicId/download');
     if (response.statusCode != 200) {

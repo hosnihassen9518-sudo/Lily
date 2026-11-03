@@ -1,5 +1,5 @@
 #include "device_lifecycle.h"
-#include "device_config.h"
+#include "lily_factory_config.h"
 #include "reset_state.h"
 #include <Preferences.h>
 #include <WiFi.h>
@@ -149,7 +149,7 @@ bool confirmWifiConnection() {
   return post("/device-runtime/operations",request,response) && response["authorization"].isNull() &&
          response["generation"]==deviceGeneration() && response["lifecycle_status"]=="ACTIVE";
 }
-bool deviceResetPending() {return initialized && !storage.getString("pending","").isEmpty();}
+bool deviceResetPending() {return initialized && storage.isKey("pending") && !storage.getString("pending","").isEmpty();}
 bool deviceRuntimeReady() {return ready && !deviceResetPending();}
 String resetCompletionReceipt() {
   if(!initialized)return "";
