@@ -91,11 +91,16 @@ its first build needs outbound access to PlatformIO and the firmware
 dependencies. Allow up to 750 seconds for the package route if you add a
 reverse proxy in front of the portal.
 
-Under Devices, choose **Flash over USB**. For a blank board, choose its
-model. For an existing Lily, choose whether to preserve its settings or
-request a reset. An existing device must have an archived factory
-configuration. The reset path requires the board to reach the backend to
-confirm the reset before it can be flashed.
+For a new board, open **Devices → Add device** and select its Lily model.
+Choose **Connect COM port** and check the detected chip, flash size, and board
+MAC. Then choose **Push configuration**. The portal verifies the reboot and
+factory serial before completing the inventory entry.
+
+For an existing Lily, open **Devices → Flash over USB**. Choose whether to
+preserve its settings or request a reset. An existing device must have an
+archived factory configuration. The reset path requires the board to reach
+the backend to confirm the reset before it can be flashed. **Generate
+configuration file** opens the manual PlatformIO workflow.
 
 ```bash
 curl --fail http://192.168.1.100:6100/health

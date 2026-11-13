@@ -22,12 +22,13 @@ import UsbFlashDialog from "../components/UsbFlashDialog";
 
 export default function DevicesPage({ inventoryOnly = false }) {
   const { can } = useAuth();
+  const canFlash = can("inventory.change") && can("inventory.export_secrets");
   const [modelEdit, setModelEdit] = useState(null);
   const [modelChoice, setModelChoice] = useState("");
   const [devices, setDevices] = useState([]);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [showFlash, setShowFlash] = useState(false);
+  const [showFlash, setShowFlash] = useState(null);
   const [error, setError] = useState("");
   const [types, setTypes] = useState([]);
   const [models, setModels] = useState([]);
@@ -118,6 +119,11 @@ export default function DevicesPage({ inventoryOnly = false }) {
     }
   }
   const [form, setForm] = useState({ device_type_id: "", model_key: "", name: "" });
+  function openManualCreation() {
+    setShowCreate(true);
+    refreshCatalog();
+  }
+
   async function refreshCatalog() {
     try {
       const [t, m] = await Promise.all([api.deviceTypes(), api.deviceModels()]);
@@ -241,8 +247,8 @@ export default function DevicesPage({ inventoryOnly = false }) {
           <button
             className="primary-button"
             onClick={() => {
-              setShowCreate(true);
-              refreshCatalog();
+              if (canFlash) setShowFlash("factory");
+              else openManualCreation();
             }}
           >
             <Plus size={18} />
@@ -263,8 +269,8 @@ export default function DevicesPage({ inventoryOnly = false }) {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {can("inventory.change") && can("inventory.export_secrets") && (
-          <button className="secondary-button" onClick={() => setShowFlash(true)}>
+        {canFlash && (
+          <button className="secondary-button" onClick={() => setShowFlash("update")}>
             <Usb size={17} />
             Flash over USB
           </button>
@@ -281,6 +287,9 @@ export default function DevicesPage({ inventoryOnly = false }) {
             Export CSV
           </button>
         </PermissionGate>
+        {canFlash && can("inventory.create") && (
+          <button className="secondary-button" onClick={openManualCreation}>Generate configuration file</button>
+        )}
         <button className="secondary-button" onClick={load}>
           <RefreshCw size={17} />
           Refresh
@@ -409,7 +418,13 @@ export default function DevicesPage({ inventoryOnly = false }) {
         )}
       </div>
 
-      {showFlash && <UsbFlashDialog allowFactory={can("inventory.create")} allowReset={can("devices.delete")} onClose={() => setShowFlash(false)} onComplete={load} />}
+      {showFlash && <UsbFlashDialog
+        factoryOnly={showFlash === "factory"}
+        allowFactory={can("inventory.create")}
+        allowReset={can("devices.delete")}
+        onClose={() => setShowFlash(null)}
+        onComplete={load}
+      />}
       {modelEdit && <Modal title="Change device model" onClose={()=>setModelEdit(null)}>
         <form className="form-grid" onSubmit={async e => {e.preventDefault(); try {
           await api.access(`/devices/admin/${modelEdit.id}/model`, "PATCH", {model_key:modelChoice});

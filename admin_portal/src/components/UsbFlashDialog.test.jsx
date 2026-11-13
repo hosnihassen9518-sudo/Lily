@@ -118,3 +118,37 @@ describe("admin USB flashing", () => {
     expect(usb.verifyResume).not.toHaveBeenCalled();
   });
 });
+
+describe("Add device over COM", () => {
+  it("requires model selection before connecting and shows detected board details before pushing", async () => {
+    usb.connectBoard.mockResolvedValue({ board: { ...hardware, kind: "blank" } });
+    render(<UsbFlashDialog factoryOnly allowFactory onClose={vi.fn()} />);
+    const select = await screen.findByLabelText("Lily model");
+    const connectPort = screen.getByRole("button", { name: "Connect COM port" });
+    expect(connectPort.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Push configuration" })).toBeNull();
+
+    fireEvent.change(select, { target: { value: model.key } });
+    fireEvent.click(connectPort);
+    const push = await screen.findByRole("button", { name: "Push configuration" });
+    expect(screen.getByText(hardware.mac)).toBeTruthy();
+    expect(select.disabled).toBe(true);
+    expect(api.usbFlashPackage).not.toHaveBeenCalled();
+
+    fireEvent.click(push);
+    await screen.findByText(`Flash and reboot verified for ${serial_number}.`);
+    expect(api.usbFlashPackage).toHaveBeenCalledWith({ ...hardware, model_key: model.key, mode: "blank" });
+    expect(usb.verifyBoot.mock.invocationCallOrder[0]).toBeLessThan(api.usbFlashComplete.mock.invocationCallOrder[0]);
+  });
+
+  it("shows an existing board but blocks factory provisioning for it", async () => {
+    usb.connectBoard.mockResolvedValue({ board: existing });
+    render(<UsbFlashDialog factoryOnly allowFactory onClose={vi.fn()} />);
+    fireEvent.change(await screen.findByLabelText("Lily model"), { target: { value: model.key } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect COM port" }));
+    expect(await screen.findByText(serial_number)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Push configuration" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset device" })).toBeNull();
+    expect(api.usbFlashPackage).not.toHaveBeenCalled();
+  });
+});

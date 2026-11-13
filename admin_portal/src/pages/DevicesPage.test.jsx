@@ -5,13 +5,13 @@ import { render,screen,fireEvent,waitFor,cleanup } from '@testing-library/react'
 import DevicesPage from './DevicesPage';
 import {api} from '../services/api';
 vi.mock('../context/AuthContext',()=>({useAuth:()=>({can:()=>true})}));
-vi.mock('../services/api',()=>({api:{devices:vi.fn(async()=>[]),deviceTypes:vi.fn(async()=>[{id:1,name:'Light'}]),deviceModels:vi.fn(async()=>[{key:'test',name:'Test light',device_type_id:1}]),generateDevice:vi.fn()}}));
+vi.mock('../services/api',()=>({api:{devices:vi.fn(async()=>[]),deviceTypes:vi.fn(async()=>[{id:1,name:'Light'}]),deviceModels:vi.fn(async()=>[{key:'test',name:'Test light',device_type_id:1}]),generateDevice:vi.fn(),usbFlashModels:vi.fn(async()=>[{key:"lily_v2",name:"Lily Light + Speaker"}])}}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 describe('one-time factory credentials',()=>{
  it('keeps creation open while pending and preserves the result when reopened',async()=>{
   let resolve;api.generateDevice.mockImplementation(()=>new Promise(r=>{resolve=r;}));
   const {container}=render(<DevicesPage/>);
-  fireEvent.click(screen.getByText('Add device'));
+  fireEvent.click(screen.getByText('Generate configuration file'));
   await screen.findByText('Light');
   const selects=container.querySelectorAll('select');
   fireEvent.change(selects[0],{target:{value:'1'}});
@@ -24,7 +24,7 @@ describe('one-time factory credentials',()=>{
   resolve({serial_number:'TEST-ONE-TIME',filename:'device_config.h',config_header:'secret'});
   await screen.findByText('TEST-ONE-TIME');
   fireEvent.mouseDown(container.querySelector('.modal-backdrop'));
-  fireEvent.click(screen.getByText('Add device'));
+  fireEvent.click(screen.getByText('Generate configuration file'));
   expect(screen.queryByText('TEST-ONE-TIME')).not.toBeNull();
  });
 });
@@ -48,8 +48,17 @@ it('refreshes available models when factory creation is reopened',async()=>{
  const {container}=render(<DevicesPage/>);
  await waitFor(()=>expect(api.deviceModels).toHaveBeenCalled());
  api.deviceModels.mockResolvedValue([{key:'new',name:'New model',device_type_id:1}]);
- fireEvent.click(screen.getByText('Add device'));
+ fireEvent.click(screen.getByText('Generate configuration file'));
  fireEvent.change(container.querySelector('select'),{target:{value:'1'}});
  await screen.findByText('New model');
  expect(screen.queryByText('Test light')).toBeNull();
+});
+
+
+it('opens model-first COM provisioning from Add device', async () => {
+ api.devices.mockResolvedValue([]);
+ render(<DevicesPage/>);
+ fireEvent.click(screen.getByRole('button',{name:'Add device'}));
+ await screen.findByRole('option',{name:'Lily Light + Speaker'});
+ expect(screen.getByRole('button',{name:'Connect COM port'}).disabled).toBe(true);
 });

@@ -698,3 +698,15 @@ td strong { display: block; }
 .permission-matrix th {white-space:nowrap;}
 .access-panel textarea {width:100%;min-height:100px;font-family:monospace;margin-bottom:12px;}
 button:disabled {cursor:not-allowed;opacity:.55;}
+
+.usb-device-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.usb-device-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
