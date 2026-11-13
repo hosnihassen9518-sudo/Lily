@@ -7,11 +7,12 @@ class DeviceStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toUpperCase();
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final Color color = switch (normalized) {
-      'ONLINE' => Colors.green,
-      'DISABLED' => Colors.red,
-      'INVENTORY' => Colors.grey,
-      _ => Colors.orange,
+      'ONLINE' => dark ? const Color(0xFF86E1AC) : const Color(0xFF24643E),
+      'DISABLED' => dark ? const Color(0xFFFFB4AB) : const Color(0xFFA52A28),
+      'INVENTORY' => Theme.of(context).colorScheme.onSurfaceVariant,
+      _ => dark ? const Color(0xFFFFCB88) : const Color(0xFF874A00),
     };
 
     return Container(

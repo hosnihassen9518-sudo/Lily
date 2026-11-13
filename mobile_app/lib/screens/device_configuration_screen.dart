@@ -180,7 +180,9 @@ class _Info extends StatelessWidget {
         width: 150,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12)),
           const SizedBox(height: 4),
           child ??
               Text(value ?? '—',

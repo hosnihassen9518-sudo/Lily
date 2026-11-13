@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/device.dart';
 import '../state/app_state.dart';
 import '../theme/lily_theme.dart';
+import '../widgets/device_picture.dart';
 import '../widgets/playback_refresher.dart';
 
 import 'schedules_screen.dart';
@@ -102,11 +103,12 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
     final d = matches.first;
     initialize(d);
+    final theme = LilyTheme.forAppearance(state.appearance);
 
     return Theme(
-        data: LilyTheme.light,
+        data: theme,
         child: Scaffold(
-          backgroundColor: const Color(0xFFF3EFFB),
+          backgroundColor: theme.scaffoldBackgroundColor,
           appBar: AppBar(
             title: Row(children: [
               Expanded(child: Text(d.displayName)),
@@ -131,6 +133,19 @@ class _DeviceScreenState extends State<DeviceScreen> {
               child: ListView(
             padding: const EdgeInsets.all(18),
             children: [
+              Card(
+                child: ListTile(
+                  leading: SizedBox(
+                    width: 56,
+                    height: 48,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: DevicePicture(device: d),
+                    ),
+                  ),
+                  title: Text(d.catalogName),
+                ),
+              ),
               if (d.supportsAudio) ...[
                 const SizedBox(height: 12),
                 Card(
@@ -160,8 +175,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
                                         : 'Stopped',
                             style: TextStyle(
                                 color: d.audioPlaying
-                                    ? Colors.green
-                                    : Colors.grey.shade600)),
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant)),
                         if (d.audioDownloading)
                           const Padding(
                               padding: EdgeInsets.only(top: 10),
@@ -197,7 +212,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                         ]),
                         if (d.audioError?.isNotEmpty == true)
                           Text(d.audioError!,
-                              style: const TextStyle(color: Colors.red)),
+                              style: TextStyle(color: theme.colorScheme.error)),
                         if (d.hasCapability('volume')) ...[
                           const SizedBox(height: 14),
                           Text('Volume: ${volume.round()}%'),
@@ -220,7 +235,8 @@ class _DeviceScreenState extends State<DeviceScreen> {
                             padding: const EdgeInsets.only(top: 10),
                             child: Text(
                                 'Choose music to browse server tracks or upload an MP3 from your phone.',
-                                style: TextStyle(color: Colors.grey.shade600)),
+                                style: TextStyle(
+                                    color: theme.colorScheme.onSurfaceVariant)),
                           ),
                       ],
                     ),

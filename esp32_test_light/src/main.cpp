@@ -409,7 +409,7 @@ void connectStoredWifi() {
 void setup() {
   Serial.begin(115200);
   delay(500);
-  Serial.printf("Lily boot: reset_reason=%d / heap=%lu / firmware=%s\n", (int)esp_reset_reason(), (unsigned long)ESP.getFreeHeap(), FIRMWARE_VERSION);
+  Serial.printf("Lily boot: serial=%s reset_reason=%d / heap=%lu / firmware=%s\n", DEVICE_SERIAL, (int)esp_reset_reason(), (unsigned long)ESP.getFreeHeap(), FIRMWARE_VERSION);
 
 #ifdef LILY_LED_STRIP
   strip.begin();
@@ -419,7 +419,8 @@ void setup() {
   lightEnabled = false;
   applyLight();
 
-  if (!LittleFS.begin(true)) Serial.println("LittleFS mount failed");
+  const bool storageReady = LittleFS.begin(true);
+  if (!storageReady) Serial.println("LittleFS mount failed");
   beginDeviceLifecycle([](){
     lightEnabled=false;applyLight();homeSsid="";homePassword="";pairingToken="";
     const char* files[]={"/wifi.json","/wifi.tmp",SCHEDULES_PATH,"/schedules.tmp"};
@@ -433,6 +434,7 @@ void setup() {
   initializeScheduleClock();
   if(WiFi.status()!=WL_CONNECTED){WiFi.disconnect(false,false);WiFi.mode(WIFI_OFF);}
   beginBleProvisioning(!homeSsid.isEmpty(), provisionOverBle);
+  if (storageReady) Serial.printf("Lily identity: serial=%s\n", DEVICE_SERIAL);
   // Saved Wi-Fi runs normally; new credentials are received over BLE.
 
 }

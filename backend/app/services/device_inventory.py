@@ -17,7 +17,7 @@ def c_string(value: str) -> str:
     # Three-digit octal escapes preserve UTF-8 without invalid C surrogate escapes.
     return '"' + ''.join(('\\' + chr(byte)) if byte in (34, 92) else chr(byte) if 32 <= byte < 127 else '\\%03o' % byte for byte in value.encode('utf-8')) + '"'
 
-def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
+def create_inventory(db, type_id: int, model_key: str, name: str | None = None, *, usb_mac: str | None = None):
     if name is not None and (not name.strip() or len(name.strip()) > 100):
         raise HTTPException(422, "Device name must contain 1 to 100 characters")
     model = db.scalar(select(DeviceModel).where(DeviceModel.key == model_key).with_for_update())
@@ -61,6 +61,9 @@ def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
     header = '#pragma once\n\n' + ('// Build: pio run -d esp32_device -e lily_v2\n' if model_key == 'lily_v2' else '') + '\n'.join('#define ' + key + ' ' + (str(value) if isinstance(value, int) else c_string(value)) for key, value in values.items()) + '\n'
     from app.services.provisioning_archive import archive_config
     archive_config(db,device.id,{'serial_number':serial,'device_secret':secret,'filename':serial+'-device_config.h','config_header':header})
+    if usb_mac is not None:
+        from app.models.device_provisioning import UsbProvisioning
+        db.add(UsbProvisioning(mac=usb_mac, device_id=device.id))
     db.commit()
     from app.api.devices import serialize_device
     return {'device': serialize_device(device, db), 'serial_number': serial, 'device_secret': secret,
@@ -69,16 +72,18 @@ def create_inventory(db, type_id: int, model_key: str, name: str | None = None):
 def seed_models(db):
     for key, name, type_key, target in (
         ('lily_v1', 'LILY-V1', 'lily_audio_light', 'esp32_device'),
-        ('lily_v2', 'Lily V2', 'lily_audio_light', 'esp32_device'),
+        ('lily_v2', 'Lily Light + Speaker', 'lily_audio_light', 'esp32_device'),
         ('lily_test_light', 'Lily Test Light', 'test_light', 'esp32_test_light'),
-        ('lily_led_strip', 'Lily LED Strip', 'test_light', 'esp32_test_light'),
+        ('lily_led_strip', 'Lily Light', 'test_light', 'esp32_test_light'),
     ):
         dtype = db.scalar(select(DeviceType).where(DeviceType.key == type_key))
         if dtype is None:
             dtype = DeviceType(key=type_key, name=name)
             db.add(dtype); db.flush()
         if db.get(DeviceModel, key) is None:
+            image = {'lily_v2': 'lily-speaker', 'lily_led_strip': 'lily-light'}.get(key)
             db.add(DeviceModel(key=key, name=name, device_type_id=dtype.id, firmware_target=target,
+                               theme_key='kids' if image else None, image_key=image,
                                capabilities=["power", "light", "brightness", "rgb", "audio", "volume"] if key == 'lily_v2' else ["power", "light", "brightness", "rgb"] if key == "lily_led_strip" else None))
     if db.get(AppSetting, 'mobile_session_months') is None:
         db.add(AppSetting(key='mobile_session_months', value_json={'months': 3}))

@@ -29,7 +29,7 @@ class LilyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Lily',
       debugShowCheckedModeBanner: false,
-      theme: LilyTheme.light,
+      theme: LilyTheme.forAppearance(state.appearance),
       home: state.authenticated ? const HomeScreen() : const AuthScreen(),
     );
   }

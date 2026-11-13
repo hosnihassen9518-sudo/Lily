@@ -182,6 +182,8 @@ class _MusicScreenState extends State<MusicScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final theme = LilyTheme.forAppearance(state.appearance);
+    final scheme = theme.colorScheme;
     final devices = state.devices
         .where((d) =>
             d.supportsAudio &&
@@ -198,9 +200,9 @@ class _MusicScreenState extends State<MusicScreen> {
                 .contains(query.toLowerCase()))
         .toList();
     return Theme(
-      data: LilyTheme.light,
+      data: theme,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3EFFB),
+        backgroundColor: theme.scaffoldBackgroundColor,
         appBar: widget.deviceId == null
             ? null
             : AppBar(title: const Text('Choose audio')),
@@ -213,7 +215,7 @@ class _MusicScreenState extends State<MusicScreen> {
               children: [
                 if (widget.deviceId == null) ...[
                   Text('Music',
-                      style: LilyTheme.light.textTheme.headlineSmall
+                      style: theme.textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 16),
                 ],
@@ -274,8 +276,8 @@ class _MusicScreenState extends State<MusicScreen> {
                                           ? Icons.error_outline
                                           : Icons.check_circle_outline,
                                       color: statusIsError
-                                          ? Colors.red.shade700
-                                          : LilyTheme.lavender),
+                                          ? scheme.error
+                                          : scheme.primary),
                                 const SizedBox(width: 10),
                                 Expanded(child: Text(status!)),
                               ]))),
@@ -289,7 +291,7 @@ class _MusicScreenState extends State<MusicScreen> {
                   Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(selectedDevice!.audioError!,
-                          style: TextStyle(color: Colors.red.shade700))),
+                          style: TextStyle(color: scheme.error))),
                 const SizedBox(height: 12),
                 if (tracks.isEmpty)
                   Padding(
@@ -301,7 +303,7 @@ class _MusicScreenState extends State<MusicScreen> {
                                 ? Icons.search_off
                                 : Icons.library_music_outlined,
                             size: 36,
-                            color: LilyTheme.lavender),
+                            color: scheme.primary),
                         const SizedBox(height: 12),
                         Text(query.isNotEmpty
                             ? 'No matching audio.'
@@ -316,7 +318,7 @@ class _MusicScreenState extends State<MusicScreen> {
                                   : 'Add tracks in the admin portal, then pull down to refresh.',
                               textAlign: TextAlign.center),
                       ])),
-                ...tracks.map((track) => trackCard(track, online)),
+                ...tracks.map((track) => trackCard(track, online, scheme)),
                 const SizedBox(height: 16),
                 Card(
                     child: ExpansionTile(
@@ -342,15 +344,15 @@ class _MusicScreenState extends State<MusicScreen> {
     );
   }
 
-  Widget trackCard(MusicTrack track, bool online) => Card(
+  Widget trackCard(MusicTrack track, bool online, ColorScheme scheme) => Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          leading: const CircleAvatar(
-              backgroundColor: Color(0xFFE9E1F6),
-              foregroundColor: LilyTheme.lavender,
-              child: Icon(Icons.music_note)),
+          leading: CircleAvatar(
+              backgroundColor: scheme.secondaryContainer,
+              foregroundColor: scheme.onSecondaryContainer,
+              child: const Icon(Icons.music_note)),
           title: Text(track.title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

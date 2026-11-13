@@ -25,7 +25,8 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     depends_on:
       mqtt:
@@ -39,6 +40,8 @@ services:
       DATABASE_URL: sqlite:////data/lily.db
       MUSIC_DIR: /data/music
       DEVICE_SIGNING_KEY_FILE: /data/device-signing.pem
+      FIRMWARE_SOURCE_DIR: /firmware
+      FIRMWARE_PIO: /opt/platformio/bin/pio
       FACTORY_BACKEND_HOST: "${FACTORY_BACKEND_HOST:-192.168.1.100}"
       FACTORY_BACKEND_PORT: "${BACKEND_PORT:-6100}"
       FACTORY_MQTT_HOST: "${FACTORY_MQTT_HOST:-192.168.1.100}"

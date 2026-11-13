@@ -84,6 +84,12 @@ export const api = {
   downloadDeviceConfig: (id) => request(`/admin/device-inventory/${id}/config`),
   resyncDevice: (id) =>
     request(`/admin/device-inventory/${id}/resync`, { method: "POST" }),
+  usbFlashModels: () => request("/admin/usb-flash/models"),
+  usbFlashDevice: (serial, mac) => request(`/admin/usb-flash/devices/${encodeURIComponent(serial)}?mac=${encodeURIComponent(mac)}`),
+  usbFlashRecovery: (mac) => request(`/admin/usb-flash/recovery/${encodeURIComponent(mac)}`),
+  usbFlashPackage: (payload) => request("/admin/usb-flash/package", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
+  usbFlashReset: (payload) => request("/admin/usb-flash/reset", { method: "POST", body: JSON.stringify(payload) }),
+  usbFlashComplete: (payload) => request("/admin/usb-flash/complete", { method: "POST", body: JSON.stringify(payload) }),
   exportDevices: (fields) =>
     request(
       "/admin/devices/export.csv" +

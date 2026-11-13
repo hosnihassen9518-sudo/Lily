@@ -14,6 +14,8 @@ class DeviceModel(Base):
     hardware_version: Mapped[str] = mapped_column(String(50), default='1.0')
     firmware_target: Mapped[str] = mapped_column(String(80))
     capabilities: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    theme_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    image_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 class AppSetting(Base):
     __tablename__ = 'app_settings'

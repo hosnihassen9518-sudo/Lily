@@ -4,6 +4,10 @@ class Device {
   final String serial;
   final String? name;
   final String model;
+  final String? modelKey;
+  final String? modelName;
+  final String? themeKey;
+  final String? imageKey;
   final String status;
   final bool online;
   final DateTime? lastSeen;
@@ -32,6 +36,10 @@ class Device {
     required this.serial,
     required this.name,
     required this.model,
+    this.modelKey,
+    this.modelName,
+    this.themeKey,
+    this.imageKey,
     required this.status,
     required this.online,
     required this.lastSeen,
@@ -67,6 +75,10 @@ class Device {
       serial: json['serial_number'] as String,
       name: json['name'] as String?,
       model: json['model'] as String? ?? 'LILY-V1',
+      modelKey: smart['model_key'] as String?,
+      modelName: smart['model_name'] as String?,
+      themeKey: smart['theme_key'] as String?,
+      imageKey: smart['image_key'] as String?,
       status: json['status'] as String? ?? 'OFFLINE',
       online: json['status'] == 'RESET_PENDING'
           ? false
@@ -97,16 +109,46 @@ class Device {
   }
 
   String get displayName =>
-      name?.trim().isNotEmpty == true ? name! : (deviceTypeName ?? model);
+      name?.trim().isNotEmpty == true ? name! : catalogName;
+  String get catalogName =>
+      modelName ??
+      switch (modelKey ?? model.toLowerCase()) {
+        'lily_led_strip' || 'lily led strip' => 'Lily Light',
+        'lily_v2' || 'lily v2' || 'lily-v2' => 'Lily Light + Speaker',
+        _ => deviceTypeName ?? model,
+      };
+  String? get appearanceKey {
+    if (themeKey != null) return themeKey;
+    return switch (modelKey ?? model.toLowerCase()) {
+      'lily_led_strip' ||
+      'lily led strip' ||
+      'lily_v2' ||
+      'lily v2' ||
+      'lily-v2' =>
+        'kids',
+      _ => null,
+    };
+  }
+
+  String? get productImageKey =>
+      imageKey ??
+      switch (modelKey ?? model.toLowerCase()) {
+        'lily_led_strip' || 'lily led strip' => 'lily-light',
+        'lily_v2' || 'lily v2' || 'lily-v2' => 'lily-speaker',
+        _ => null,
+      };
+
   bool hasCapability(String capability) => capabilities.contains(capability);
   bool get supportsLight => hasCapability('light');
   bool get supportsAudio => hasCapability('audio');
   String? get currentTrackTitle {
     final title = (genericState['audio'] is Map
-        ? genericState['audio']['title']?.toString()
-        : null) ?? genericState['current_track_title']?.toString();
+            ? genericState['audio']['title']?.toString()
+            : null) ??
+        genericState['current_track_title']?.toString();
     return title?.trim().isNotEmpty == true ? title : null;
   }
+
   Map get audioState =>
       genericState['audio'] is Map ? genericState['audio'] as Map : const {};
   bool get streamAvailable => audioState['stream_available'] == true;
@@ -143,6 +185,10 @@ class Device {
           'device_type_id': deviceTypeId,
           'device_type_key': deviceTypeKey,
           'device_type_name': deviceTypeName,
+          'model_key': modelKey,
+          'model_name': modelName,
+          'theme_key': themeKey,
+          'image_key': imageKey,
           'capabilities': capabilities
         },
         'generic_state': genericState,

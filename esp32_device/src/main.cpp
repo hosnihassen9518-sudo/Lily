@@ -840,6 +840,7 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     connectMqtt();
   }
+  Serial.printf("Lily identity: serial=%s\n", DEVICE_SERIAL);
 }
 
 void loop() {

@@ -35,6 +35,6 @@ def test_device_model_change_preserves_identity_and_checks_compatibility(client,
     response = client.patch(f"/api/v1/devices/admin/{device.id}/model", headers=admin, json={"model_key":"lily_led_strip"})
     assert response.status_code == 200
     db.refresh(device)
-    assert device.model == "Lily LED Strip" and device.name == "Strip 01"
+    assert device.model == "Lily Light" and device.name == "Strip 01"
     assert device.secret_hash == original_hash
     assert client.patch(f"/api/v1/devices/admin/{device.id}/model", headers=admin, json={"model_key":"lily_v1"}).status_code == 409

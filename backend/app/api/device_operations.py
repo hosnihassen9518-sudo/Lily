@@ -122,12 +122,18 @@ def wifi_session(device_id:int,payload:Challenge,user:User=Depends(get_current_u
 @router.post('/devices/{device_id}/removal')
 def remove_device(device_id:int,user:User=Depends(get_current_user),db:Session=Depends(get_db)):
     device=owned(db,device_id,user)
+    if device.owner_id != user.id:
+        raise HTTPException(404, 'Device not found')
+    return request_device_reset(db, device, user)
+
+
+def request_device_reset(db, device, user):
     if device.lifecycle_status=='RESET_PENDING':
         op=db.scalar(select(DeviceOperation).where(DeviceOperation.device_id==device.id,DeviceOperation.status=='pending'))
         if op: return operation_result(op)
         raise HTTPException(409,'Reset operation unavailable')
     require_mutable(device);identity=supported(db,device);signing_key()
-    changed=db.execute(update(Device).where(Device.id==device.id,Device.owner_id==user.id,Device.lifecycle_status==device.lifecycle_status).values(lifecycle_status='RESET_PENDING'))
+    changed=db.execute(update(Device).where(Device.id==device.id,Device.owner_id==device.owner_id,Device.lifecycle_status==device.lifecycle_status).values(lifecycle_status='RESET_PENDING'))
     if changed.rowcount!=1:
         db.rollback();raise HTTPException(409,'Device changed; reload and retry')
     op=DeviceOperation(id=secrets.token_hex(16),device_id=device.id,requested_by_id=user.id,generation=identity.generation)

@@ -121,6 +121,9 @@ def serialize_device(device: Device, db: Session | None = None):
     if db is not None:
         model = associated_model(db, device)
         smart_home["model_key"] = model.key if model else None
+        smart_home["model_name"] = model.name if model else None
+        smart_home["theme_key"] = model.theme_key if model else None
+        smart_home["image_key"] = model.image_key if model else None
         smart_home["capabilities"] = effective_capabilities(db, device)
 
     return {

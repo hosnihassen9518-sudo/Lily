@@ -83,6 +83,20 @@ Browser clients calling the backend directly need their origin added to
 
 ## Verification
 
+For admin USB flashing, open the portal in desktop Chrome or Edge on the
+computer with the USB cable. Use a trusted HTTPS origin, or forward the
+portal to `localhost` on that computer. The browser will ask you to select
+the serial port. Firmware packages are built in the backend container, so
+its first build needs outbound access to PlatformIO and the firmware
+dependencies. Allow up to 750 seconds for the package route if you add a
+reverse proxy in front of the portal.
+
+Under Devices, choose **Flash over USB**. For a blank board, choose its
+model. For an existing Lily, choose whether to preserve its settings or
+request a reset. An existing device must have an archived factory
+configuration. The reset path requires the board to reach the backend to
+confirm the reset before it can be flashed.
+
 ```bash
 curl --fail http://192.168.1.100:6100/health
 curl --fail http://192.168.1.100:6080/healthz

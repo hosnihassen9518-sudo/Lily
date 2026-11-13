@@ -12,11 +12,13 @@ import {
   KeyRound,
   Download,
   FileSpreadsheet,
+  Usb,
 } from "lucide-react";
 import { api } from "../services/api";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import EmptyState from "../components/EmptyState";
+import UsbFlashDialog from "../components/UsbFlashDialog";
 
 export default function DevicesPage({ inventoryOnly = false }) {
   const { can } = useAuth();
@@ -25,6 +27,7 @@ export default function DevicesPage({ inventoryOnly = false }) {
   const [devices, setDevices] = useState([]);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showFlash, setShowFlash] = useState(false);
   const [error, setError] = useState("");
   const [types, setTypes] = useState([]);
   const [models, setModels] = useState([]);
@@ -260,6 +263,12 @@ export default function DevicesPage({ inventoryOnly = false }) {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        {can("inventory.change") && can("inventory.export_secrets") && (
+          <button className="secondary-button" onClick={() => setShowFlash(true)}>
+            <Usb size={17} />
+            Flash over USB
+          </button>
+        )}
         <PermissionGate permission="devices.export" action>
           <button
             className="secondary-button"
@@ -400,6 +409,7 @@ export default function DevicesPage({ inventoryOnly = false }) {
         )}
       </div>
 
+      {showFlash && <UsbFlashDialog allowFactory={can("inventory.create")} allowReset={can("devices.delete")} onClose={() => setShowFlash(false)} onComplete={load} />}
       {modelEdit && <Modal title="Change device model" onClose={()=>setModelEdit(null)}>
         <form className="form-grid" onSubmit={async e => {e.preventDefault(); try {
           await api.access(`/devices/admin/${modelEdit.id}/model`, "PATCH", {model_key:modelChoice});

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
+import '../models/lily_appearance.dart';
 import '../models/music_track.dart';
 import '../models/home.dart';
 import '../services/api_service.dart';
@@ -16,6 +17,7 @@ class AppState extends ChangeNotifier {
     this.api.onSessionInvalidated = () {
       _sessionRevision++;
       profile = null;
+      _preferredAppearance = null;
       devices = [];
       music = [];
       homes = [];
@@ -37,6 +39,50 @@ class AppState extends ChangeNotifier {
   late final WidgetSync widgets;
   int _sessionRevision = 0;
   BackendSettings get backendSettings => BackendSettings.fromUrl(api.baseUrl);
+
+  String? _preferredAppearance;
+
+  String? get _appearancePreferenceKey {
+    final accountId = profile?['id'];
+    if (accountId == null || !authenticated) return null;
+    return 'appearance:${api.baseUrl}:$accountId';
+  }
+
+  List<LilyAppearance> get availableAppearances {
+    final keys = devices.map((device) => device.appearanceKey).toSet();
+    return LilyAppearance.values
+        .where((theme) => keys.contains(theme.name))
+        .toList();
+  }
+
+  LilyAppearance get appearance {
+    final available = availableAppearances;
+    final preferred = LilyAppearance.fromKey(_preferredAppearance);
+    if (available.length > 1 && available.contains(preferred))
+      return preferred!;
+    return available.isEmpty ? LilyAppearance.kids : available.first;
+  }
+
+  void _loadAppearance(SharedPreferences prefs) {
+    final key = _appearancePreferenceKey;
+    _preferredAppearance = key == null ? null : prefs.getString(key);
+  }
+
+  Future<void> selectAppearance(LilyAppearance value) async {
+    final key = _appearancePreferenceKey;
+    final revision = _sessionRevision;
+    if (key == null || !availableAppearances.contains(value)) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (revision != _sessionRevision ||
+        key != _appearancePreferenceKey ||
+        !availableAppearances.contains(value)) return;
+    if (!await prefs.setString(key, value.name)) {
+      throw StateError('Could not save appearance.');
+    }
+    if (revision != _sessionRevision || key != _appearancePreferenceKey) return;
+    _preferredAppearance = value.name;
+    notifyListeners();
+  }
 
   Future<void> saveBackendSettings(BackendSettings settings) async {
     if (busy) throw StateError('Wait for the current request to finish.');
@@ -169,8 +215,10 @@ class AppState extends ChangeNotifier {
 
     if (api.token != null) {
       _restoreCache(prefs.getString('session_cache'));
+      _loadAppearance(prefs);
       try {
         profile = await api.me();
+        _loadAppearance(prefs);
         await refresh();
       } catch (e) {
         if (e is ApiException && e.statusCode == 401) {
@@ -202,6 +250,7 @@ class AppState extends ChangeNotifier {
       final token = await api.loginMobile(email, password);
       await _storeToken(token);
       profile = await api.me();
+      _loadAppearance(await SharedPreferences.getInstance());
       await refresh();
     } catch (e) {
       error = e.toString();
@@ -226,6 +275,7 @@ class AppState extends ChangeNotifier {
           await api.registerMobile(email, password, firstName, lastName);
       await _storeToken(token);
       profile = await api.me();
+      _loadAppearance(await SharedPreferences.getInstance());
       await refresh();
     } catch (e) {
       error = e.toString();
@@ -242,6 +292,7 @@ class AppState extends ChangeNotifier {
     await api.logoutSession();
     api.token = null;
     profile = null;
+    _preferredAppearance = null;
     devices = [];
     music = [];
     homes = [];

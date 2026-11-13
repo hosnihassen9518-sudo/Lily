@@ -20,6 +20,8 @@ export default function DeviceTypesPage() {
     device_type_id: "",
     hardware_version: "1.0",
     firmware_target: "esp32_device",
+    theme_key: "",
+    image_key: "",
     capabilities: [],
   };
   const [model, setModel] = useState(emptyModel);
@@ -91,6 +93,8 @@ export default function DeviceTypesPage() {
       const payload = {
         ...fields,
         device_type_id: Number(model.device_type_id),
+        theme_key: model.theme_key || null,
+        image_key: model.image_key || null,
       };
       const response = editing
         ? await api.updateDeviceModel(key, payload)
@@ -244,6 +248,26 @@ export default function DeviceTypesPage() {
             >
               <option value="esp32_device">ESP32 device</option>
               <option value="esp32_test_light">ESP32 test light</option>
+            </select>
+          </label>
+          <label>
+            Mobile theme
+            <select disabled={busy} value={model.theme_key ?? ""}
+              onChange={(e) => setModel({ ...model, theme_key: e.target.value })}>
+              <option value="">Default</option>
+              <option value="kids">Kids</option>
+              <option value="gaming">Gaming</option>
+            </select>
+          </label>
+          <label>
+            Device picture
+            <select disabled={busy} value={model.image_key ?? ""}
+              onChange={(e) => setModel({ ...model, image_key: e.target.value })}>
+              <option value="">Automatic</option>
+              <option value="lily-light">Lily Light</option>
+              <option value="lily-speaker">Lily Light + Speaker</option>
+              <option value="gaming-light">Gaming light</option>
+              <option value="gaming-speaker">Gaming light + speaker</option>
             </select>
           </label>
           <fieldset style={{ gridColumn: "1 / -1" }} disabled={busy || !ready || !can(editing ? "models.change" : "models.create")}>

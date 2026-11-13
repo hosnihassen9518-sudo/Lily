@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
+import '../models/lily_appearance.dart';
 import '../state/app_state.dart';
 import '../widgets/device_card.dart';
 import '../widgets/backend_settings_button.dart';
 import '../widgets/lily_logo.dart';
+import '../theme/lily_theme.dart';
 import 'home_management_screen.dart';
 import 'music_screen.dart';
 import 'widget_settings_screen.dart';
@@ -72,7 +74,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ?.copyWith(fontWeight: FontWeight.w800))),
               const SizedBox(width: 8),
               Text('${devices.length}',
-                  style: TextStyle(color: Colors.grey.shade600)),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ],
           ),
           const SizedBox(height: 10),
@@ -156,52 +159,73 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _header(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [Color(0xFFE6DDF8), Color(0xFFDCEFFC)]),
-                borderRadius: BorderRadius.circular(24)),
-            child: Row(children: [
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text('A little everyday magic',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
+  Widget _header(BuildContext context) {
+    final gaming =
+        context.watch<AppState>().appearance == LilyAppearance.gaming;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+              gradient: LinearGradient(
+                  colors: gaming
+                      ? [scheme.secondaryContainer, scheme.tertiaryContainer]
+                      : [const Color(0xFFE6DDF8), LilyTheme.sky]),
+              borderRadius: BorderRadius.circular(24)),
+          child: Row(children: [
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(gaming ? 'Your gaming setup' : 'A little everyday magic',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  if (!gaming)
                     const Text('Lights, music, and cozy moments with Lily.')
-                  ])),
-              const SizedBox(width: 12),
+                ])),
+            const SizedBox(width: 12),
+            if (gaming)
+              Icon(Icons.sports_esports_outlined,
+                  size: 54, color: scheme.primary)
+            else
               ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: Image.asset('assets/branding/lily_cloud.png',
                       width: 76, height: 76, fit: BoxFit.cover))
-            ])),
-        if (context.watch<AppState>().offline) ...[
-          const SizedBox(height: 12),
-          const Text('Showing saved configuration. Pull down to reconnect.')
-        ],
-        const SizedBox(height: 20),
-        Row(children: [
-          Expanded(
-              child: Text('My devices',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800))),
-          if (!kIsWeb)
-            FilledButton.icon(
-                onPressed: _addDevice,
-                icon: const Icon(Icons.add),
-                label: const Text('Add'))
-        ]),
-      ]);
+          ])),
+      if (context.watch<AppState>().offline) ...[
+        const SizedBox(height: 12),
+        const Text('Showing saved configuration. Pull down to reconnect.')
+      ],
+      const SizedBox(height: 20),
+      Row(children: [
+        Expanded(
+            child: Text('My devices',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800))),
+        if (!kIsWeb)
+          FilledButton.icon(
+              onPressed: _addDevice,
+              icon: const Icon(Icons.add),
+              label: const Text('Add'))
+      ]),
+    ]);
+  }
+
+  Future<void> _changeAppearance(LilyAppearance appearance) async {
+    try {
+      await context.read<AppState>().selectAppearance(appearance);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save appearance.')));
+    }
+  }
 
   Future<void> _addDevice() async {
     final added = await Navigator.of(context).push<bool>(
@@ -222,9 +246,28 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(state.profile?['email']?.toString() ?? '',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 14),
+        if (state.availableAppearances.length > 1) ...[
+          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: state.availableAppearances
+                .map((appearance) => ChoiceChip(
+                      label: Text(appearance.label),
+                      selected: appearance == state.appearance,
+                      onSelected: (selected) {
+                        if (selected) _changeAppearance(appearance);
+                      },
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 14),
+        ],
         OutlinedButton.icon(
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const WidgetSettingsScreen())),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const WidgetSettingsScreen())),
             icon: const Icon(Icons.widgets_outlined),
             label: const Text('Home-screen widgets')),
         const SizedBox(height: 14),

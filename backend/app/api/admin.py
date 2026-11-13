@@ -1,5 +1,8 @@
 from app.services.access_sessions import can_manage_device, can_access_home
-from fastapi import APIRouter, Depends, HTTPException
+import hashlib
+import secrets
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -13,7 +16,7 @@ from app.models.user import User
 from app.models.access_control import ServicePrincipal
 from app.schemas.admin import ActiveUpdate
 from pydantic import BaseModel, Field
-from app.models.device_lifecycle import DeviceModel
+from app.models.device_lifecycle import DeviceModel, DeviceOperation
 from app.services.device_features import (
     FEATURES,
     model_capabilities,
@@ -30,6 +33,8 @@ class ModelCreate(BaseModel):
     hardware_version: str = Field(default="1.0", min_length=1, max_length=50)
     firmware_target: str
     capabilities: list[str] | None = None
+    theme_key: str | None = Field(default=None, pattern=r"^(kids|gaming)$")
+    image_key: str | None = Field(default=None, max_length=64, pattern=r"^[a-z0-9-]+$")
 
 
 class ModelUpdate(BaseModel):
@@ -39,6 +44,8 @@ class ModelUpdate(BaseModel):
     device_type_id: int | None = None
     firmware_target: str | None = None
     capabilities: list[str] | None = None
+    theme_key: str | None = Field(default=None, pattern=r"^(kids|gaming)$")
+    image_key: str | None = Field(default=None, max_length=64, pattern=r"^[a-z0-9-]+$")
 
 
 def serialize_model(db, model):
@@ -51,6 +58,8 @@ def serialize_model(db, model):
                 "device_type_id",
                 "hardware_version",
                 "firmware_target",
+                "theme_key",
+                "image_key",
             )
         },
         "capabilities": model_capabilities(db, model),
@@ -135,7 +144,7 @@ def update_model(key: str, payload: ModelUpdate, db: Session = Depends(get_db)):
     if not model:
         raise HTTPException(404, "Model not found")
     values = payload.model_dump(exclude_unset=True)
-    if any(value is None for field, value in values.items() if field != "capabilities"):
+    if any(value is None for field, value in values.items() if field not in {"capabilities", "theme_key", "image_key"}):
         raise HTTPException(422, "Model fields cannot be null")
     if model_in_use(db, model) and any(
         field in values and values[field] != getattr(model, field)
@@ -223,6 +232,256 @@ def generated_inventory(
             if k not in {"device_secret", "config_header"}
         }
     return result
+
+
+class UsbBoard(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    mac: str = Field(pattern=r'^(?:[0-9A-Fa-f]{12}|[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})$')
+    serial_number: str | None = Field(default=None, pattern=r'^LILY-[A-F0-9]{16}$')
+
+    @property
+    def board_mac(self):
+        return self.mac.replace(':', '').lower()
+
+
+class UsbPackageRequest(UsbBoard):
+    mode: Literal['blank', 'keep', 'reset']
+    chip: str = Field(max_length=80)
+    flash_size: int
+    model_key: str | None = Field(default=None, max_length=80)
+    partition_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    resume: bool = False
+
+
+class UsbComplete(UsbBoard):
+    mode: Literal['blank', 'keep', 'reset']
+    completion_token: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+def require_usb_access(actor, *extra):
+    access = actor._access
+    if access.auth_method != 'portal' or not {'inventory.change', 'inventory.export_secrets', *extra}.issubset(access.permissions):
+        raise HTTPException(403, 'USB flashing requires portal inventory permissions.')
+
+
+def usb_device(db, actor, board):
+    from app.models.device_provisioning import UsbProvisioning
+
+    device = db.scalar(select(Device).where(Device.serial_number == board.serial_number).with_for_update())
+    if not can_manage_device(db, actor, device, 'inventory.change'):
+        raise HTTPException(404, 'Device not found in accessible inventory.')
+    binding = db.get(UsbProvisioning, board.board_mac)
+    if (binding and binding.device_id != device.id) or db.scalar(
+        select(UsbProvisioning.mac).where(UsbProvisioning.device_id == device.id, UsbProvisioning.mac != board.board_mac)
+    ):
+        raise HTTPException(409, 'This USB board does not match the inventory identity.')
+    return device, binding
+
+
+@router.get('/usb-flash/models')
+def usb_flash_models(actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.usb_firmware import TARGETS
+
+    require_usb_access(actor)
+    return [{'key': model.key, 'name': model.name} for model in db.scalars(
+        select(DeviceModel).where(DeviceModel.key.in_(TARGETS)).order_by(DeviceModel.name)
+    )]
+
+
+@router.get('/usb-flash/devices/{serial_number}')
+def usb_flash_device(serial_number: str, mac: str = Query(...), actor: User = Depends(get_current_user),
+                     db: Session = Depends(get_db)):
+    from app.services.device_features import associated_model
+
+    require_usb_access(actor)
+    try:
+        board = UsbBoard(mac=mac, serial_number=serial_number)
+    except ValueError:
+        raise HTTPException(422, 'Invalid USB board identity.') from None
+    device, binding = usb_device(db, actor, board)
+    model = associated_model(db, device)
+    return {'serial_number': device.serial_number, 'model_key': model.key if model else None,
+            'name': model.name if model else device.model, 'owned': device.owner_id is not None,
+            'factory_pending': bool(binding and binding.pending_mode == 'blank' and binding.pending_package)}
+
+
+@router.get('/usb-flash/recovery/{mac}')
+def usb_flash_recovery(mac: str, actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.device_provisioning import UsbProvisioning
+    from app.services.usb_firmware import open_package
+
+    require_usb_access(actor)
+    try:
+        board = UsbBoard(mac=mac)
+    except ValueError:
+        raise HTTPException(422, 'Invalid USB board identity.') from None
+    binding = db.get(UsbProvisioning, board.board_mac)
+    if not binding or binding.pending_mode not in {'keep', 'reset'} or not binding.pending_package:
+        return None
+    device = db.get(Device, binding.device_id)
+    if not can_manage_device(db, actor, device, 'inventory.change'):
+        raise HTTPException(404, 'Device not found in accessible inventory.')
+    package = open_package(board.board_mac, binding.pending_package)
+    return {'serial_number': device.serial_number, 'model_key': package['model_key'], 'name': device.name or device.model,
+            'mode': binding.pending_mode, 'partition_sha256': package['partition_sha256']}
+
+
+@router.post('/usb-flash/package')
+def usb_flash_package(payload: UsbPackageRequest, response: Response,
+                      actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.api.device_operations import require_cleanup_complete, require_mutable
+    from app.models.device_provisioning import UsbProvisioning
+    from app.services.device_authorization import prepare_signing_key
+    from app.services.device_features import associated_model
+    from app.services.device_inventory import create_inventory
+    from app.services.provisioning_archive import stored_config
+    from app.services.rbac import lock_security
+    from app.services.usb_firmware import FLASH_SIZE, TARGETS, build_package, open_package, require_builder, seal_package
+
+    require_usb_access(actor, *(['inventory.create'] if payload.mode == 'blank' else []))
+    response.headers['Cache-Control'] = 'no-store'
+    if payload.chip != 'ESP32-S3' or payload.flash_size != FLASH_SIZE:
+        raise HTTPException(422, 'This workflow supports ESP32-S3 boards with 16 MiB flash.')
+    mac = payload.board_mac
+    if payload.mode == 'blank':
+        if payload.serial_number or payload.partition_sha256:
+            raise HTTPException(422, 'Factory provisioning requires the blank board workflow.')
+        if not payload.resume:
+            prepare_signing_key(db)
+        lock_security(db)
+        binding = db.get(UsbProvisioning, mac)
+        if binding:
+            device = db.get(Device, binding.device_id)
+            model = associated_model(db, device)
+            if device.owner_id is not None or device.lifecycle_status != 'INVENTORY':
+                raise HTTPException(409, 'This USB board is already in use. Use the existing Lily workflow.')
+            if payload.model_key and (not model or model.key != payload.model_key):
+                raise HTTPException(409, 'This board already has a different model assigned.')
+            if binding.pending_package and binding.pending_mode != 'blank':
+                raise HTTPException(409, 'This board has a pending update. Resume the existing Lily update.')
+            if binding.pending_package:
+                package = open_package(mac, binding.pending_package)
+                db.commit()
+                return package
+            if payload.resume:
+                raise HTTPException(409, 'No pending factory package exists for this board.')
+        else:
+            if payload.resume:
+                raise HTTPException(409, 'No pending factory package exists for this board.')
+            model = db.get(DeviceModel, payload.model_key) if payload.model_key else None
+            if not model or model.key not in TARGETS:
+                raise HTTPException(422, 'Choose a supported Lily model.')
+            require_builder()
+            result = create_inventory(db, model.device_type_id, model.key, usb_mac=mac)
+            device = db.get(Device, result['device']['id'])
+    else:
+        if not payload.serial_number or not payload.partition_sha256:
+            raise HTTPException(422, 'An existing Lily needs its detected serial and partition layout.')
+        device, binding = usb_device(db, actor, payload)
+        if binding and binding.pending_package and binding.pending_mode == 'blank':
+            raise HTTPException(409, 'Resume the pending factory flash for this board.')
+        require_mutable(device)
+        require_cleanup_complete(db, device)
+        if payload.mode == 'reset':
+            require_usb_access(actor, 'devices.delete')
+            if device.owner_id is not None or device.lifecycle_status != 'INVENTORY':
+                raise HTTPException(409, 'Complete the device reset before flashing.')
+        model = associated_model(db, device)
+        if payload.model_key and (not model or model.key != payload.model_key):
+            raise HTTPException(409, 'Firmware model does not match inventory.')
+        if binding and binding.pending_package:
+            if binding.pending_mode != payload.mode:
+                raise HTTPException(409, 'Resume the prepared update before changing the update mode.')
+            saved = open_package(mac, binding.pending_package)
+            if not model or saved['model_key'] != model.key or saved['partition_sha256'] != payload.partition_sha256:
+                raise HTTPException(409, 'The saved update does not match this model and partition layout.')
+            return saved
+        if payload.resume:
+            raise HTTPException(409, 'No pending update exists for this USB board.')
+    if not model or model.key not in TARGETS:
+        raise HTTPException(422, 'No supported USB firmware target for this model.')
+    serial, key, device_id = device.serial_number, model.key, device.id
+    archived = stored_config(db, device_id)
+    db.commit()
+    package = build_package(key, serial, archived['config_header'], factory=payload.mode == 'blank',
+                            partition_sha256=payload.partition_sha256)
+    package['completion_token'] = secrets.token_hex(32)
+    if payload.mode == 'blank':
+        lock_security(db)
+        binding = db.get(UsbProvisioning, mac)
+        device = db.get(Device, device_id)
+        if not binding or binding.device_id != device_id or not device or device.owner_id is not None or device.lifecycle_status != 'INVENTORY':
+            raise HTTPException(409, 'The pending factory device changed during the build.')
+        if binding.pending_package:
+            saved = open_package(mac, binding.pending_package)
+            db.commit()
+            return saved
+        binding.pending_package = seal_package(mac, package)
+        binding.pending_mode = 'blank'
+        db.commit()
+    else:
+        lock_security(db)
+        current, binding = usb_device(db, actor, payload)
+        require_mutable(current)
+        require_cleanup_complete(db, current)
+        current_model = associated_model(db, current)
+        if not current_model or current_model.key != key or (payload.mode == 'reset' and current.owner_id is not None):
+            raise HTTPException(409, 'The inventory device changed during the firmware build.')
+        if binding and binding.pending_package:
+            raise HTTPException(409, 'A different request prepared this board. Reconnect to resume it.')
+        if not binding:
+            binding = UsbProvisioning(mac=mac, device_id=device_id)
+            db.add(binding)
+        binding.pending_package = seal_package(mac, package)
+        binding.pending_mode = payload.mode
+        db.commit()
+    return package
+
+
+@router.post('/usb-flash/reset')
+def usb_flash_reset(payload: UsbBoard, actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.api.device_operations import require_cleanup_complete, request_device_reset
+
+    require_usb_access(actor, 'devices.delete')
+    device, binding = usb_device(db, actor, payload)
+    if binding and binding.pending_package:
+        raise HTTPException(409, 'Finish the pending flash before resetting this device.')
+    if device.owner_id is None and device.lifecycle_status == 'INVENTORY':
+        require_cleanup_complete(db, device)
+        operation = db.scalar(select(DeviceOperation).where(
+            DeviceOperation.device_id == device.id, DeviceOperation.status == 'completed'
+        ).order_by(DeviceOperation.completed_at.desc()).limit(1))
+        if operation:
+            return {'status': 'completed', 'operation_id': operation.id}
+        raise HTTPException(409, 'This device is already unpaired. Use Keep identity and settings to update it.')
+    return request_device_reset(db, device, actor)
+
+
+@router.post('/usb-flash/complete')
+def usb_flash_complete(payload: UsbComplete, actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.access_audit import audit
+    from app.services.rbac import lock_security
+    from app.services.usb_firmware import open_package
+
+    permission = {'blank': ('inventory.create',), 'reset': ('devices.delete',), 'keep': ()}[payload.mode]
+    require_usb_access(actor, *permission)
+    lock_security(db)
+    device, binding = usb_device(db, actor, payload)
+    token_hash = hashlib.sha256(f'{payload.mode}:{payload.completion_token}'.encode()).hexdigest()
+    if binding and not binding.pending_package and secrets.compare_digest(binding.completed_token_hash or '', token_hash):
+        db.commit()
+        return {'status': 'completed'}
+    if not binding or not binding.pending_package or binding.pending_mode != payload.mode:
+        raise HTTPException(409, 'No matching flash is registered for this USB board.')
+    package = open_package(payload.board_mac, binding.pending_package)
+    if not secrets.compare_digest(package['completion_token'], payload.completion_token):
+        raise HTTPException(409, 'This confirmation belongs to a different flash attempt.')
+    binding.pending_package = None
+    binding.pending_mode = None
+    binding.completed_token_hash = token_hash
+    audit(db, actor.id, 'inventory.usb_flash.' + payload.mode, device.id)
+    db.commit()
+    return {'status': 'completed'}
 
 
 @router.get("/mobile-session-policy")

@@ -4,6 +4,7 @@ import '../models/device.dart';
 import '../state/app_state.dart';
 import '../screens/device_screen.dart';
 import 'device_status_badge.dart';
+import 'device_picture.dart';
 
 class DeviceCard extends StatefulWidget {
   final Device device;
@@ -84,11 +85,7 @@ class _DeviceCardState extends State<DeviceCard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                  height: 110,
-                  child: Image.asset('assets/branding/lily_cloud.png',
-                      fit: BoxFit.cover,
-                      semanticLabel: 'Smiling cloud nightlight')),
+              SizedBox(height: 110, child: DevicePicture(device: device)),
               Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -99,6 +96,10 @@ class _DeviceCardState extends State<DeviceCard> {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontWeight: FontWeight.w800, fontSize: 16)),
+                        if (device.displayName != device.catalogName &&
+                            device.modelName != null)
+                          Text(device.catalogName,
+                              style: Theme.of(context).textTheme.bodySmall),
                         const SizedBox(height: 6),
                         DeviceStatusBadge(status: device.status),
                         const SizedBox(height: 10),
